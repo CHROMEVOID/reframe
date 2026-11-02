@@ -445,6 +445,37 @@ async function click(wc, { x, y }) {
   wc.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount: 1 });
 }
 
+// Reads pictures straight out of what the page has already downloaded (the
+// browser engine keeps every resource a page loaded). Nothing is fetched
+// again, so ad blockers, hotlink protection and "are you human" checks
+// can't get in the way. Returns a Map of address → { data, type }.
+async function grabLoaded(wc, urls) {
+  const out = new Map();
+  const want = [...new Set(urls.filter((u) => /^https?:/i.test(u || '')))];
+  if (!want.length || wc.isDestroyed()) return out;
+  try {
+    if (!wc.debugger.isAttached()) wc.debugger.attach('1.3');
+    await wc.debugger.sendCommand('Page.enable');
+    const { frameTree } = await wc.debugger.sendCommand('Page.getResourceTree');
+    const where = new Map();
+    const walk = (t) => {
+      for (const r of t.resources || []) if (!where.has(r.url)) where.set(r.url, { frameId: t.frame.id, type: r.mimeType });
+      for (const c of t.childFrames || []) walk(c);
+    };
+    walk(frameTree);
+    for (const u of want) {
+      const at = where.get(u);
+      if (!at) continue;
+      try {
+        const r = await wc.debugger.sendCommand('Page.getResourceContent', { frameId: at.frameId, url: u });
+        const data = Buffer.from(r.content || '', r.base64Encoded ? 'base64' : 'utf8');
+        if (data.length) out.set(u, { data, type: at.type || '' });
+      } catch { /* no longer in memory: it will be downloaded instead */ }
+    }
+  } catch { /* the engine's channel is busy (e.g. DevTools open) */ }
+  return out;
+}
+
 // One way of turning the page, done once.
 async function turn(wc, how) {
   if (how.key) {
@@ -467,14 +498,15 @@ const WAYS = [
 
 // Adds every following page to `images` (skipping ones in `seen`).
 // Returns how the pages were turned, or null if nothing worked.
-async function turnPages(w, images, seen, onProgress, { max = 500, sameSite = () => true } = {}) {
+async function turnPages(w, images, seen, onProgress, { max = 500, sameSite = () => true, onFresh = null } = {}) {
   const wc = w.webContents;
   const stillOnSite = () => sameSite(wc.getURL());
-  const keep = (pics) => {
+  const keep = async (pics) => {
     for (const p of pics) {
       seen.add(p.url);
       images.push(p);
     }
+    if (onFresh) await onFresh(pics);
     if (onProgress) onProgress(images.length);
   };
 
@@ -485,7 +517,7 @@ async function turnPages(w, images, seen, onProgress, { max = 500, sameSite = ()
     const fresh = await waitForNew(wc, seen);
     if (fresh.length && stillOnSite()) {
       found = how;
-      keep(fresh);
+      await keep(fresh);
       break;
     }
     // A wrong guess that left the reader: go back to where we were.
@@ -500,11 +532,11 @@ async function turnPages(w, images, seen, onProgress, { max = 500, sameSite = ()
     if (!(await turn(wc, found))) break;
     const fresh = await waitForNew(wc, seen);
     if (fresh.length && stillOnSite()) {
-      keep(fresh);
+      await keep(fresh);
       stuck = 0;
     } else stuck++;
   }
   return found.key ? `the ${found.key} key` : found.control.startsWith('tap') ? 'clicking the page' : 'the page’s arrow button';
 }
 
-module.exports = { turnPages, onScreen, grabVisible, findTurnControls, pickControls, clickControl, waitForNew, click };
+module.exports = { turnPages, onScreen, grabVisible, grabLoaded, findTurnControls, pickControls, clickControl, waitForNew, click };

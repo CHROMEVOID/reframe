@@ -37,6 +37,33 @@ const CHALLENGE_HOSTS = ['challenges.cloudflare.com', 'hcaptcha.com', 'newassets
 const CHECK_TITLE = /just a moment|attention required|verify(ing)? (you|that)|are you (a )?(human|robot)|security check|ddos-guard|checking your browser|captcha|one more step/i;
 const isChallenge = (u) => /challenges\.cloudflare\.com|cdn-cgi\/challenge|hcaptcha|recaptcha|arkoselabs|funcaptcha|captcha-delivery|perimeterx|px-cloud|px-cdn|ddos-guard|__cf_chl/i.test(String(u));
 
+function hostOf(u) {
+  try {
+    return new URL(u).hostname.replace(/^www\./, '');
+  } catch {
+    return 'Web';
+  }
+}
+
+// The "came from" address to send with a download. Like a normal browser,
+// another server only gets the site's address, not the full page address:
+// Chromium refuses the request otherwise (with ERR_BLOCKED_BY_CLIENT, the
+// same error an ad blocker gives, which made this hard to spot).
+function refererFor(target, page) {
+  try {
+    const t = new URL(target);
+    const p = new URL(page);
+    return t.origin === p.origin ? p.href : `${p.origin}/`;
+  } catch {
+    return undefined;
+  }
+}
+
+const refHeaders = (target, page) => {
+  const r = refererFor(target, page);
+  return r ? { Referer: r } : {};
+};
+
 // Rough "same site" check: example.co.uk and video.example.co.uk match.
 function siteOf(u) {
   try {
@@ -334,13 +361,26 @@ class Capture {
   // screen, so nothing can interfere with it.
   applyBlocking() {
     if (!this.blocker) return;
-    const want = !!this.settings().adblock && !this.checking;
+    const want = !!this.settings().adblock && !this.checking && !this.collecting;
     if (want === this.blockingOn) return;
     try {
       if (want) this.blocker.enableBlockingInSession(this.ses);
       else this.blocker.disableBlockingInSession(this.ses);
       this.blockingOn = want;
     } catch { /* already in that state */ }
+  }
+
+  // The ad blocker is paused while pictures are being collected: its lists
+  // also catch some readers' own page pictures, which then never load.
+  async whileCollecting(fn) {
+    this.collecting = (this.collecting || 0) + 1;
+    this.applyBlocking();
+    try {
+      return await fn();
+    } finally {
+      this.collecting -= 1;
+      this.applyBlocking();
+    }
   }
 
   checkGuard() {
@@ -555,7 +595,7 @@ class Capture {
     pictures.slice(0, 4).forEach((m, i) => {
       const what = m.how === 'full-size link' ? 'Full-size picture' : m.how === 'video cover' ? 'Video cover' : m.how === 'background' ? 'Background picture' : 'Picture';
       const actions = [
-        { label: 'Save', click: () => { wc.downloadURL(m.url, { headers: { Referer: ref } }); say(fileNameOf(m.url, 'picture')); } },
+        { label: 'Save', click: () => { wc.downloadURL(m.url, { headers: refHeaders(m.url, ref) }); say(fileNameOf(m.url, 'picture')); } },
         { label: 'Save as…', click: () => this.saveAs(m.url, fileNameOf(m.url, 'picture.jpg')) },
         { label: 'Copy picture', click: () => wc.copyImageAt(p.x, p.y) },
         { label: 'Copy address', click: () => clipboard.writeText(m.url) },
@@ -630,7 +670,7 @@ class Capture {
     const r = await dialog.showSaveDialog(this.win, { defaultPath: name });
     if (r.canceled || !r.filePath) return;
     this.saveAsPath = r.filePath;
-    this.page.webContents.downloadURL(url, { headers: { Referer: this.page.webContents.getURL() } });
+    this.page.webContents.downloadURL(url, { headers: refHeaders(url, this.page.webContents.getURL()) });
   }
 
   // ---------- pictures ----------
@@ -642,7 +682,24 @@ class Capture {
   }
 
   async findPictures() {
-    const r = await this.collectPictures(this.page.webContents);
+    const wc = this.page.webContents;
+    const r = await this.whileCollecting(async () => {
+      // Pictures the blocker stopped before the pause show as broken: load
+      // the page again (once) so they come in.
+      const broken = await wc.executeJavaScript(
+        'Array.from(document.images).filter((i) => i.complete && !i.naturalWidth && /^https?:/.test(i.currentSrc || i.src) && i.getBoundingClientRect().width > 100).length',
+        true,
+      ).catch(() => 0);
+      if (broken) {
+        wc.reload();
+        await new Promise((res) => {
+          const t = setTimeout(res, 30000);
+          wc.once('did-stop-loading', () => { clearTimeout(t); res(); });
+        });
+        await new Promise((res) => setTimeout(res, 2500));
+      }
+      return this.collectPictures(wc);
+    });
     this.pictures = r;
     return { title: r.title, count: r.images.length, sample: r.images.slice(0, 12).map((i) => i.url), sizes: r.images.slice(0, 1).map((i) => `${i.w}×${i.h}`)[0] || '', paged: r.images.length <= 3 };
   }
@@ -657,6 +714,37 @@ class Capture {
     });
   }
 
+  // Reads the given pictures out of the page's memory now, while it's still
+  // loaded, so saving them later needs no second download.
+  async remember(wc, pics) {
+    const { grabLoaded } = require('./page-turner');
+    this.inline = this.inline || new Map();
+    let urls = pics.map((p) => p.url).filter((u) => /^https?:/i.test(u) && !this.inline.has(u));
+    // A page that's still downloading isn't in memory yet: give it a moment.
+    for (let t = 0; t < 4 && urls.length; t++) {
+      if (t) await new Promise((r) => setTimeout(r, 700));
+      for (const [u, v] of await grabLoaded(wc, urls)) this.inline.set(u, v);
+      urls = urls.filter((u) => !this.inline.has(u));
+    }
+  }
+
+  // A second session with no ad blocker, used only to re-download a picture
+  // that wasn't in the page's memory. It sends the Capture browser's own
+  // cookies and browser ID, so the site sees the same visitor.
+  async cleanFetch(u, referer) {
+    if (!this.fetchSes) this.fetchSes = session.fromPartition('reframe-picture-fetch');
+    const cookies = (await this.ses.cookies.get({ url: u }).catch(() => [])).map((c) => `${c.name}=${c.value}`).join('; ');
+    const headers = { ...refHeaders(u, referer), 'User-Agent': this.ses.getUserAgent() || UA, Accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8' };
+    if (cookies) headers.Cookie = cookies;
+    try {
+      return await this.fetchSes.fetch(u, { headers });
+    } catch (e) {
+      // Some servers still won't take the page address: try once without it.
+      delete headers.Referer;
+      return this.fetchSes.fetch(u, { headers });
+    }
+  }
+
   fetcherFor(referer) {
     return (u) => {
       const kept = this.inline && this.inline.get(u);
@@ -664,13 +752,15 @@ class Capture {
         this.inline.delete(u);
         return Promise.resolve(new Response(kept.data, { headers: { 'content-type': kept.type || 'image/jpeg' } }));
       }
-      return this.ses.fetch(u, { headers: { Referer: referer, 'User-Agent': UA } });
+      return this.cleanFetch(u, referer);
     };
   }
 
-  savePictures(cbz) {
+  async savePictures(cbz) {
     const r = this.pictures;
     if (!r || !r.images.length) throw new Error('No pictures found on this page.');
+    await this.remember(this.page.webContents, r.images);
+    this.releaseDebugger(this.page.webContents);
     let site = 'Web';
     try {
       site = new URL(r.url).hostname.replace(/^www\./, '');
@@ -688,54 +778,86 @@ class Capture {
 
   async loadIn(w, u) {
     await Promise.race([w.loadURL(u).catch(() => {}), new Promise((r) => setTimeout(r, 30000))]);
-    await new Promise((r) => setTimeout(r, 1500));
+    // Readers keep building themselves after the page has "loaded": wait
+    // until the pictures and the page length stop changing (up to 10 s).
+    const sig = () => w.webContents.executeJavaScript(
+      'Array.from(document.images).filter((i) => i.complete && i.naturalWidth > 100).length + ":" + document.documentElement.scrollHeight + ":" + document.querySelectorAll("*").length',
+      true,
+    ).catch(() => '');
+    let last = '';
+    let same = 0;
+    for (let t = 0; t < 20 && same < 3; t++) {
+      await new Promise((r) => setTimeout(r, 500));
+      const now = await sig();
+      same = now && now === last ? same + 1 : 0;
+      last = now;
+    }
   }
 
   // One-picture-per-page readers: follow "Next" links from page to page, or,
   // for readers that change page in place (arrow buttons, arrow keys,
   // clicking the side of the page), keep turning — see page-turner.js.
-  async collectPaged(cbz, onProgress) {
-    const { turnPages, onScreen } = require('./page-turner');
+  collectPaged(cbz, onProgress) {
+    return this.whileCollecting(() => this.collectPagedNow(cbz, onProgress));
+  }
+
+  async collectPagedNow(cbz, onProgress) {
     const start = this.page.webContents.getURL();
     const w = this.hiddenWindow();
-    const images = [];
-    const seenPages = new Set();
-    const seenImgs = new Set();
-    const keep = (pics) => {
-      for (const p of pics) if (!seenImgs.has(p.url)) {
-        seenImgs.add(p.url);
-        images.push(p);
-      }
-    };
-    let url = start;
-    let title = this.page.webContents.getTitle();
+    let got;
     try {
-      for (let i = 0; i < 500 && url && !seenPages.has(url); i++) {
-        seenPages.add(url);
-        if (onProgress) onProgress(images.length + 1);
-        await this.loadIn(w, url);
-        const r = await this.collectPictures(w.webContents).catch(() => null);
-        if (!r) break;
-        if (i === 0) title = r.title || title;
-        // The page's picture (or both pages of a two-page spread).
-        keep(await onScreen(w.webContents));
-        url = r.next && siteOf(r.next) === siteOf(start) ? r.next : null;
-        // No "Next" link on the very first page: the reader turns pages in place.
-        if (!url && i === 0) {
-          await turnPages(w, images, seenImgs, onProgress, { sameSite: (u) => siteOf(u) === siteOf(start) });
-          break;
-        }
-      }
+      got = await this.gatherPaged(w, start, onProgress, this.page.webContents.getTitle());
     } finally {
       w.destroy();
     }
-    if (!images.length) throw new Error('No pages found. Open the first page of a chapter (not the chapter list) and try again.');
-    let site = 'Web';
+    if (!got.images.length) throw new Error('No pages found. Open the first page of a chapter (not the chapter list) and try again.');
+    this.onPictures({ title: got.title, site: hostOf(start), images: this.stash(got.images), cbz, fetcher: this.fetcherFor(start) });
+    return got.images.length;
+  }
+
+  // Gathers every page of a one-page-at-a-time reader in the hidden window
+  // `w`: follows "Next" links, or turns pages in place (page-turner.js).
+  // Each page's picture is read from memory as soon as it shows.
+  // `followLinks: false` keeps it on this one page (turning pages in place),
+  // so a "next episode" link can't walk off through a whole series.
+  async gatherPaged(w, start, onProgress, fallbackTitle = '', { followLinks = true } = {}) {
+    const { turnPages, onScreen } = require('./page-turner');
+    const images = [];
+    const seenPages = new Set();
+    const seenImgs = new Set();
+    const keep = async (pics) => {
+      const fresh = pics.filter((p) => !seenImgs.has(p.url));
+      for (const p of fresh) {
+        seenImgs.add(p.url);
+        images.push(p);
+      }
+      await this.remember(w.webContents, fresh);
+    };
+    let url = start;
+    let title = fallbackTitle;
+    for (let i = 0; i < 500 && url && !seenPages.has(url); i++) {
+      seenPages.add(url);
+      if (onProgress) onProgress(images.length + 1);
+      await this.loadIn(w, url);
+      const r = await this.collectPictures(w.webContents).catch(() => null);
+      if (!r) break;
+      if (i === 0) title = r.title || title;
+      // The page's picture (or both pages of a two-page spread).
+      await keep(await onScreen(w.webContents));
+      url = followLinks && r.next && siteOf(r.next) === siteOf(start) ? r.next : null;
+      // No "Next" link on the very first page: the reader turns pages in place.
+      if (!url && i === 0) {
+        await turnPages(w, images, seenImgs, onProgress, { sameSite: (u) => siteOf(u) === siteOf(start), onFresh: (pics) => this.remember(w.webContents, pics) });
+        break;
+      }
+    }
+    return { title, images };
+  }
+
+  releaseDebugger(wc) {
     try {
-      site = new URL(start).hostname.replace(/^www./, '');
-    } catch { /* keep Web */ }
-    this.onPictures({ title, site, images: this.stash(images), cbz, fetcher: this.fetcherFor(start) });
-    return images.length;
+      if (!this.clicking && wc.debugger.isAttached()) wc.debugger.detach();
+    } catch { /* already gone */ }
   }
 
   // ---------- "I click Next" readers ----------
@@ -768,7 +890,7 @@ class Capture {
     this.stopClicking = false;
     this.clicking = true;
     try {
-      return await this.clickPages(wc, controls, fromStart, cbz, onProgress, start);
+      return await this.whileCollecting(() => this.clickPages(wc, controls, fromStart, cbz, onProgress, start));
     } finally {
       this.clicking = false;
       try {
@@ -797,20 +919,22 @@ class Capture {
     const title = wc.getTitle();
     const images = [];
     const seen = new Set();
-    const keep = (pics) => {
-      for (const p of pics) if (!seen.has(p.url)) {
+    const keep = async (pics) => {
+      const fresh = pics.filter((p) => !seen.has(p.url));
+      for (const p of fresh) {
         seen.add(p.url);
         images.push(p);
       }
+      await this.remember(wc, fresh);
       if (onProgress) onProgress({ phase: 'collect', n: images.length });
     };
-    keep(await onScreen(wc));
+    await keep(await onScreen(wc));
     for (let stuck = 0; images.length < 2000 && stuck < 2 && !this.stopClicking;) {
       if (!(await clickControl(wc, controls.next))) break; // no Next button: last page
       // Pages that load a new address need longer than ones that swap in place.
       const fresh = await waitForNew(wc, seen, 18);
       if (fresh.length && siteOf(wc.getURL()) === siteOf(start)) {
-        keep(fresh);
+        await keep(fresh);
         stuck = 0;
       } else stuck++;
     }
@@ -825,8 +949,12 @@ class Capture {
 
   // For a list of links (e.g. chapters from a .txt file): open each one in a
   // hidden page, collect its pictures and save them, one comic per link.
-  async picturesFromLinks(urls, cbz, onProgress) {
-    const ses = this.getSession();
+  picturesFromLinks(urls, cbz, onProgress) {
+    return this.whileCollecting(() => this.picturesFromLinksNow(urls, cbz, onProgress));
+  }
+
+  async picturesFromLinksNow(urls, cbz, onProgress) {
+    this.getSession();
     const w = this.hiddenWindow();
     let saved = 0;
     try {
@@ -835,11 +963,25 @@ class Capture {
         await this.loadIn(w, u);
         const r = await this.collectPictures(w.webContents).catch(() => null);
         if (!r || !r.images.length) continue;
-        let site = 'Web';
-        try {
-          site = new URL(u).hostname.replace(/^www\./, '');
-        } catch { /* keep Web */ }
-        this.onPictures({ title: r.title || `${site} ${i + 1}`, site, images: r.images, cbz, fetcher: (x) => ses.fetch(x, { headers: { Referer: u, 'User-Agent': UA } }) });
+        const site = hostOf(u);
+        let images = r.images;
+        let title = r.title || `${site} ${i + 1}`;
+        // Nobody's here to say how the reader works, so: keep what scrolling
+        // found, and if the page has a Next / flip control (or shows only a
+        // page or two), also try turning pages. The bigger haul wins.
+        await this.remember(w.webContents, images);
+        const { findTurnControls } = require('./page-turner');
+        const controls = await w.webContents.executeJavaScript(`(${findTurnControls.toString()})()`, true).catch(() => ({}));
+        if (images.length <= 3 || (controls && controls.next)) {
+          // A link that already scrolls to several pages is one chapter: only
+          // turn pages in place there, never follow links off to other pages.
+          const got = await this.gatherPaged(w, u, null, title, { followLinks: images.length <= 3 });
+          const loser = got.images.length > images.length ? images : got.images;
+          if (got.images.length > images.length) ({ images, title } = got);
+          const keepUrls = new Set(images.map((p) => p.url));
+          for (const p of loser) if (!keepUrls.has(p.url) && this.inline) this.inline.delete(p.url);
+        }
+        this.onPictures({ title, site, images: this.stash(images), cbz, fetcher: this.fetcherFor(u) });
         saved++;
       }
     } finally {
@@ -888,7 +1030,7 @@ class Capture {
   // page's cookies and referrer. Only answers while the Capture browser is open.
   async proxy(target, request) {
     if (!this.win || !this.ses || !/^https?:\/\//i.test(target)) return new Response('Not available', { status: 404 });
-    const headers = { Referer: this.page.webContents.getURL(), 'User-Agent': UA };
+    const headers = { ...refHeaders(target, this.page.webContents.getURL()), 'User-Agent': this.ses.getUserAgent() || UA };
     const range = request.headers.get('range');
     if (range) headers.Range = range;
     const res = await this.ses.fetch(target, { headers });

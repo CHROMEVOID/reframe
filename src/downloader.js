@@ -26,6 +26,22 @@ function safeName(name) {
   return String(name || 'video').replace(/[<>:"/\\|?*\x00-\x1f]/g, ' ').replace(/\s+/g, ' ').trim().replace(/[. ]+$/, '').slice(0, 150) || 'video';
 }
 
+// A comic's name from its page title, without the site's own tail
+// ("Chapter 3 | SomeSite", "Book : Free Download ... : Internet Archive").
+function tidyTitle(title, site) {
+  let t = String(title || '').replace(/\s+/g, ' ').trim();
+  const word = String(site || '').replace(/^www\./, '').split('.')[0].toLowerCase();
+  for (let i = 0; i < 4; i++) {
+    const m = /^(.+?)\s+(?:[|·•–—:]|-|::)\s+([^|·•–—:]+)$/.exec(t);
+    if (!m) break;
+    const tail = m[2].toLowerCase();
+    const siteish = (word && tail.replace(/[^a-z0-9]/g, '').includes(word)) || /free download|read online|online free|streaming|official site/.test(tail);
+    if (!siteish) break;
+    t = m[1].trim();
+  }
+  return (t || site || 'Comic').slice(0, 100).trim();
+}
+
 function nameFromResponse(res, url) {
   const cd = res.headers.get('content-disposition') || '';
   const m = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(cd);
@@ -578,6 +594,7 @@ class Transfers extends EventEmitter {
   // 001.jpg, 002.jpg... and optionally packed into one .cbz comic file.
   // `fetcher` comes from the Capture browser so its cookies and referrer apply.
   addImages({ title, site, outDir, images, cbz, fetcher }) {
+    title = tidyTitle(title, site);
     const job = {
       id: uid(), kind: 'download', type: 'images', title, site, outDir, cbz: !!cbz, after: {}, status: 'queued',
       progress: 0, speed: '', eta: '', phase: '', files: [], error: '', createdAt: Date.now(), startedAt: null, finishedAt: null, log: [],
@@ -591,8 +608,14 @@ class Transfers extends EventEmitter {
   }
 
   async runImages(job) {
-    const dir = path.join(job.outDir, 'Comics', safeName(job.title));
+    const comics = path.join(job.outDir, 'Comics');
+    // Pages for a .cbz are gathered in a short temporary folder: Windows'
+    // tar can't open folders whose full path is longer than 260 characters.
+    const dir = job.cbz
+      ? path.join(require('os').tmpdir(), `reframe-${job.id}`)
+      : path.join(comics, safeName(job.title));
     await fsp.mkdir(dir, { recursive: true });
+    await fsp.mkdir(comics, { recursive: true });
     const EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif', 'image/avif': '.avif' };
     let n = 0;
     for (const item of job.items) {
@@ -629,17 +652,31 @@ class Transfers extends EventEmitter {
       job.phase = 'Packing the comic';
       this.emitJob(job, true);
       const { run } = require('./tools');
-      const zip = path.join(job.outDir, 'Comics', `${safeName(job.title)}.zip`);
-      const cbz = await uniquePath(zip.replace(/\.zip$/, '.cbz'));
+      const zip = path.join(dir, 'comic.zip');
+      const cbz = await uniquePath(path.join(comics, `${safeName(job.title)}.cbz`));
       const tar = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe');
-      const r = await run(tar, ['-a', '-cf', zip, '-C', dir, ...job.files.map((f) => path.basename(f))], { timeout: 120000 });
+      const r = await run(tar, ['-a', '-cf', zip, '-C', dir, ...job.files.map((f) => path.basename(f))], { timeout: 300000 });
       if (r.ok) {
-        await fsp.rename(zip, cbz);
+        // copy + remove rather than rename: the downloads folder may be on another drive.
+        await fsp.copyFile(zip, cbz);
         await fsp.rm(dir, { recursive: true, force: true });
         job.files = [cbz];
-      } else job.log.push(`cbz failed: ${r.stderr}`);
+      } else {
+        job.log.push(`cbz failed: ${r.stderr}`);
+        // Keep the pages as a folder rather than lose them.
+        const keep = await uniquePath(path.join(comics, safeName(job.title)));
+        await fsp.mkdir(keep, { recursive: true });
+        for (const f of job.files) await fsp.copyFile(f, path.join(keep, path.basename(f)));
+        await fsp.rm(dir, { recursive: true, force: true });
+        job.files = job.files.map((f) => path.join(keep, path.basename(f)));
+      }
+    } else if (job.cbz) {
+      await fsp.rm(dir, { recursive: true, force: true }).catch(() => {});
     }
-    if (!job.files.length) throw new Error('No pictures could be saved.');
+    if (!job.files.length) {
+      const why = (job.items.find((i) => i.error) || {}).error;
+      throw new Error(`No pictures could be saved${why ? ` (${why})` : ''}.`);
+    }
     job.phase = '';
   }
 
