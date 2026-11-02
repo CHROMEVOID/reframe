@@ -5,7 +5,6 @@
 // Each way is tried in turn; the first one that brings up a new picture is
 // used for the rest of the chapter.
 
-const { pageScan } = require('./picture-scan');
 
 // Runs inside the page: where the clickable "turn the page" controls are,
 // nearest to the main picture first. Coordinates are in the window.
@@ -84,11 +83,134 @@ function findTurnControls() {
 
 // The picture(s) on screen right now: the biggest one, plus any about as big
 // (two-page spreads), in reading order.
+// Runs inside a page or embedded frame: the big pictures actually showing on
+// screen right now, judged by how big they LOOK (a logo file can be huge but
+// is drawn small). Pictures that only exist inside the page (blob: and data:
+// addresses, or drawn on a <canvas>) are read out here and now, because
+// readers throw them away as soon as the page turns.
+async function grabVisible(opts) {
+  const { topArea = 0, isTop = true } = opts || {};
+  const vw = innerWidth;
+  const vh = innerHeight;
+  // An embedded frame has to be a real part of the screen (not an ad box).
+  if (!isTop && vw * vh < topArea * 0.2) return [];
+  const shownArea = (r) => Math.max(0, Math.min(r.right, vw) - Math.max(r.left, 0)) * Math.max(0, Math.min(r.bottom, vh) - Math.max(r.top, 0));
+  const hiddenEl = (el) => {
+    const cs = getComputedStyle(el);
+    return cs.visibility === 'hidden' || cs.display === 'none' || Number(cs.opacity) < 0.1;
+  };
+  const cands = [];
+  const consider = (el, kind, src) => {
+    const r = el.getBoundingClientRect();
+    if (Math.min(r.width, r.height) < 180) return;
+    const a = shownArea(r);
+    if (a < vw * vh * 0.06 || hiddenEl(el)) return;
+    cands.push({ el, kind, src, r, a });
+  };
+  for (const img of document.images) consider(img, 'img', img.currentSrc || img.src);
+  for (const c of document.querySelectorAll('canvas')) consider(c, 'canvas', null);
+  let n = 0;
+  for (const el of document.querySelectorAll('div, section, figure, a, span, li')) {
+    if (++n > 4000) break;
+    const bg = getComputedStyle(el).backgroundImage;
+    const m = bg && bg !== 'none' && /url\(["']?([^"')]+)["']?\)/.exec(bg);
+    if (m) consider(el, 'bg', new URL(m[1], location.href).href);
+  }
+  if (!cands.length) return [];
+  cands.sort((a, b) => b.a - a.a);
+  // The main picture, plus anything nearly as big beside it (two-page spreads).
+  const keep = cands.filter((c) => c.a >= cands[0].a * 0.45).slice(0, 4);
+  let rtl = document.documentElement.dir === 'rtl';
+  for (let el = keep[0].el.parentElement; el && el !== document.body && !rtl; el = el.parentElement) {
+    const cs = getComputedStyle(el);
+    if (cs.direction === 'rtl' || /row-reverse/.test(cs.flexDirection)) rtl = true;
+  }
+  keep.sort((a, b) => (Math.abs(a.r.top - b.r.top) > 40 ? a.r.top - b.r.top : rtl ? b.r.left - a.r.left : a.r.left - b.r.left));
+
+  const toB64 = (blob) => new Promise((res) => {
+    const fr = new FileReader();
+    fr.onload = () => res(String(fr.result).split(',')[1] || '');
+    fr.onerror = () => res('');
+    fr.readAsDataURL(blob);
+  });
+  // A fingerprint of the whole picture (every byte counts: two comic pages
+  // can be almost identical).
+  const hash = (s) => {
+    let a = 2166136261;
+    let b = 5381;
+    for (let i = 0; i < s.length; i++) {
+      const c = s.charCodeAt(i);
+      a = Math.imul(a ^ c, 16777619) >>> 0;
+      b = ((b << 5) + b + c) >>> 0;
+    }
+    return `${a.toString(36)}${b.toString(36)}-${s.length}`;
+  };
+  const out = [];
+  for (const c of keep) {
+    const w = c.kind === 'img' ? c.el.naturalWidth || Math.round(c.r.width) : c.kind === 'canvas' ? c.el.width : Math.round(c.r.width);
+    const h = c.kind === 'img' ? c.el.naturalHeight || Math.round(c.r.height) : c.kind === 'canvas' ? c.el.height : Math.round(c.r.height);
+    if (c.kind === 'canvas') {
+      try {
+        const url = c.el.toDataURL('image/png');
+        const b64 = url.split(',')[1];
+        if (b64 && b64.length > 2000) out.push({ url: `inline:canvas-${hash(b64)}`, w, h, shown: c.a, b64, type: 'image/png' });
+      } catch { /* drawn from another site's picture: the browser won't hand it over */ }
+      continue;
+    }
+    const src = c.src || '';
+    if (/^https?:/i.test(src)) {
+      out.push({ url: src, w, h, shown: c.a });
+    } else if (/^(blob|data):/i.test(src)) {
+      // The browser's "current" address can still name the last page's file,
+      // which the reader has already thrown away, so try both addresses...
+      let got = null;
+      for (const u of new Set([c.el.src, src].filter((x) => /^(blob|data):/i.test(x || '')))) {
+        try {
+          const blob = await (await fetch(u)).blob();
+          const b64 = await toB64(blob);
+          if (b64) {
+            got = { b64, type: blob.type || 'image/jpeg' };
+            break;
+          }
+        } catch { /* gone: try the next one */ }
+      }
+      // ...and if both are gone, copy the picture as it's drawn on screen.
+      if (!got && c.kind === 'img' && c.el.naturalWidth) {
+        try {
+          const cv = document.createElement('canvas');
+          cv.width = c.el.naturalWidth;
+          cv.height = c.el.naturalHeight;
+          cv.getContext('2d').drawImage(c.el, 0, 0);
+          const b64 = cv.toDataURL('image/png').split(',')[1];
+          if (b64) got = { b64, type: 'image/png' };
+        } catch { /* the browser won't hand it over */ }
+      }
+      if (got) out.push({ url: `inline:${got.type.replace(/\W+/g, '-')}-${hash(got.b64)}`, w, h, shown: c.a, b64: got.b64, type: got.type });
+    }
+  }
+  return out;
+}
+
+// The picture(s) on screen right now, from the page and any big embedded
+// frame (some readers sit inside one). Inline pictures come back with their
+// bytes in `data`.
 async function onScreen(wc) {
-  const r = await wc.executeJavaScript(`(${pageScan.toString()})({ scroll: false })`, true).catch(() => null);
-  if (!r || !r.images.length) return [];
-  const big = Math.max(...r.images.map((i) => i.w * i.h));
-  return r.images.filter((i) => i.w * i.h >= big * 0.5);
+  const frames = wc.mainFrame ? [wc.mainFrame, ...wc.mainFrame.framesInSubtree.filter((f) => f !== wc.mainFrame)] : [];
+  if (!frames.length) return [];
+  const top = await frames[0].executeJavaScript('innerWidth * innerHeight').catch(() => 0);
+  let best = [];
+  let bestArea = 0;
+  for (const f of frames.slice(0, 12)) {
+    const opts = JSON.stringify({ topArea: top, isTop: f === frames[0] });
+    const list = await f.executeJavaScript(`(${grabVisible.toString()})(${opts})`, true).catch(() => null);
+    if (!list || !list.length) continue;
+    const area = list.reduce((n, p) => n + (p.shown || 0), 0);
+    if (area > bestArea) {
+      best = list;
+      bestArea = area;
+    }
+  }
+  return best.map(({ b64, type, shown, ...p }) => (b64 ? { ...p, data: Buffer.from(b64, 'base64'), type } : p));
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -172,7 +294,10 @@ function pickControls() {
       sheet.style.pointerEvents = 'none';
       const under = document.elementFromPoint(e.clientX, e.clientY);
       sheet.style.pointerEvents = 'auto';
-      const el = under && (under.closest('button, a, [role="button"], [onclick]') || under);
+      // A button inside an embedded frame can't be looked up from out here:
+      // remember the exact spot instead.
+      const found = under && (under.closest('button, a, [role="button"], [onclick]') || under);
+      const el = found && found.tagName !== 'IFRAME' && found.tagName !== 'FRAME' ? found : null;
       const s = steps[step];
       out[s.key] = { x: Math.round(e.clientX), y: Math.round(e.clientY), sel: el ? selectorOf(el) : null, sig: el ? sigOf(el) : null, vw: innerWidth, vh: innerHeight };
       mark(e.clientX, e.clientY, s.key === 'next' ? 'Next' : 'Back', s.color);
@@ -382,4 +507,4 @@ async function turnPages(w, images, seen, onProgress, { max = 500, sameSite = ()
   return found.key ? `the ${found.key} key` : found.control.startsWith('tap') ? 'clicking the page' : 'the page’s arrow button';
 }
 
-module.exports = { turnPages, onScreen, findTurnControls, pickControls, clickControl, waitForNew, click };
+module.exports = { turnPages, onScreen, grabVisible, findTurnControls, pickControls, clickControl, waitForNew, click };

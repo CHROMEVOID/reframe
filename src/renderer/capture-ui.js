@@ -240,7 +240,9 @@ async function drawClickMode(controls) {
     p.append(clickStatus, row);
     try {
       const n = await window.cap.clickThrough({ controls, fromStart: fromStart.checked, cbz });
-      clickStatus.textContent = `Saving ${n} page${n === 1 ? '' : 's'} ✓ Follow it in Reframe’s Activity.`;
+      clickStatus.textContent = n === 1
+        ? 'Only 1 page was found: the picture didn’t change when Reframe pressed Next. Press “Pick different buttons” and click right on the reader’s arrows, or try “It scrolls”.'
+        : `Saving ${n} pages ✓ Follow it in Reframe’s Activity.`;
       stop.remove();
       toast(`Saving ${n} pages${cbz ? ' as one comic' : ''}. Follow it in Reframe’s Activity.`);
     } catch (e) {

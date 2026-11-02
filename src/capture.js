@@ -647,8 +647,25 @@ class Capture {
     return { title: r.title, count: r.images.length, sample: r.images.slice(0, 12).map((i) => i.url), sizes: r.images.slice(0, 1).map((i) => `${i.w}×${i.h}`)[0] || '', paged: r.images.length <= 3 };
   }
 
+  // Pictures read straight out of a page (blob:, data:, canvas) are kept here
+  // until the comic is saved, because they can't be downloaded again.
+  stash(images) {
+    this.inline = this.inline || new Map();
+    return images.map(({ data, type, ...p }) => {
+      if (data) this.inline.set(p.url, { data, type });
+      return p;
+    });
+  }
+
   fetcherFor(referer) {
-    return (u) => this.ses.fetch(u, { headers: { Referer: referer, 'User-Agent': UA } });
+    return (u) => {
+      const kept = this.inline && this.inline.get(u);
+      if (kept) {
+        this.inline.delete(u);
+        return Promise.resolve(new Response(kept.data, { headers: { 'content-type': kept.type || 'image/jpeg' } }));
+      }
+      return this.ses.fetch(u, { headers: { Referer: referer, 'User-Agent': UA } });
+    };
   }
 
   savePictures(cbz) {
@@ -717,7 +734,7 @@ class Capture {
     try {
       site = new URL(start).hostname.replace(/^www./, '');
     } catch { /* keep Web */ }
-    this.onPictures({ title, site, images, cbz, fetcher: this.fetcherFor(start) });
+    this.onPictures({ title, site, images: this.stash(images), cbz, fetcher: this.fetcherFor(start) });
     return images.length;
   }
 
@@ -802,7 +819,7 @@ class Capture {
     try {
       site = new URL(start).hostname.replace(/^www./, '');
     } catch { /* keep Web */ }
-    this.onPictures({ title, site, images, cbz, fetcher: this.fetcherFor(start) });
+    this.onPictures({ title, site, images: this.stash(images), cbz, fetcher: this.fetcherFor(start) });
     return images.length;
   }
 
