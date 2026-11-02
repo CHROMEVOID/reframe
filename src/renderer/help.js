@@ -22,6 +22,8 @@ const HELP = [
     '“Download this page” hands the page to the downloader instead.',
     'Sign in to sites here — downloads use the same sign-in.',
     'A site’s own Download button (MEGA, MediaFire, Google Drive…) works too: the file is saved to your downloads folder and shown in Activity.',
+    'Comics and galleries: press Pictures and say how the reader works. “It scrolls” reads the whole page, down or sideways.',
+    '“I click Next”: click the reader’s Next button, then its Previous button (the page ignores those two clicks). Reframe then presses Next itself and saves every page, and you can watch it and stop any time. Tick “Start from the first page” if you’re part-way through a chapter.',
   ]],
   ['link', 'Your own sites (.txt files)', [
     'Put .txt files of http/https links in Documents › Reframe Other Sites, or press Import .txt. One link per line; “Name - link” gives it a name.',

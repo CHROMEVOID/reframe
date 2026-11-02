@@ -19,6 +19,12 @@ const { Capture } = require('./capture');
 
 app.setAppUserModelId('com.chr0m3void.reframe');
 
+// Windows tells Chromium when a window is covered, and Chromium then treats
+// it as hidden: pages pause and stop taking input. That would stall a long
+// conversion preview or a Capture browser click-through the moment another
+// window is put on top, so covered windows keep running normally.
+app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
+
 protocol.registerSchemesAsPrivileged([{
   scheme: 'reframe',
   privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true },
@@ -153,6 +159,7 @@ const capture = new Capture({
   icon: path.join(ASSET_DIR, 'icon.png'),
   onFile: (item, site) => transfers.trackBrowserDownload(item, { outDir: settings.downloads.dir, site, after: downloadAfter() }),
   settings: () => settings.capture,
+  appearance: () => settings.appearance,
   saveSettings: () => saveSettings(),
   onPictures: (o) => transfers.addImages({ ...o, outDir: settings.downloads.dir }),
   ffmpeg: () => (tools.hasFfmpeg() ? { ffmpeg: tools.ffmpegPath, probe: tools.ffprobePath } : null),
@@ -693,6 +700,7 @@ function registerIpc() {
     if (!settings.downloads.dir) settings.downloads.dir = DEFAULT_SETTINGS.downloads.dir;
     if (typeof settings.suffix !== 'string' || !settings.suffix.trim()) settings.suffix = DEFAULT_SETTINGS.suffix;
     saveSettings();
+    if ('appearance' in (patch || {})) capture.sendLook();
     if ('presetsPath' in (patch || {})) presets = loadPresets({ file: settings.presetsPath || null, writeCustomTo: CUSTOM_PRESETS_FILE });
     return { ...settings, accounts: undefined };
   });

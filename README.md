@@ -36,13 +36,16 @@ Then it kind of grew. It downloads videos now. It has a media library. It has it
 
 ### ⬇️ Download videos
 - Paste a link from YouTube, TikTok, Twitch, Reddit or [a frankly silly number of other sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md). Pick a quality, or just the audio, done.
-- The **Capture browser** is a mini browser inside the app. Go to a page, press play, and Reframe lists every video it spots, with previews so you know which is which. Ads get kicked out of that list.
+- The **Capture browser** is a mini browser inside the app. Go to a page, press play, and Reframe lists every video it spots, with previews so you know which is which. Ads get kicked out of that list. Its buttons match the colour you pick in Settings.
 - It has an ad blocker built in, and it asks before a site tries to bounce you somewhere else with a sneaky redirect.
 - Right-click any picture or video on a page to save it there and then.
 
 ### 📚 Comics and galleries
-- Open a chapter or gallery page and Reframe scrolls through it, grabs every page in reading order and packs it into a `.cbz` any comic reader can open.
-- Works with long vertical webtoons, page-by-page readers and right-to-left manga.
+- Open a chapter or gallery page, hit **Pictures**, and tell Reframe how the reader works:
+  - **It scrolls** (down or sideways): Reframe scrolls the whole thing and grabs every page in reading order.
+  - **I click Next**: click the reader's Next button, then its Back button (the site doesn't even notice those two clicks). Reframe then presses Next itself, page after page, while you watch. Hit Stop whenever you like.
+- Everything gets packed into a `.cbz` any comic reader can open.
+- Works with long vertical webtoons, one-page-at-a-time readers, two-page spreads and right-to-left manga.
 
 ### 🗂️ A media library that sorts itself
 - Everything you convert or download lands in the library, sorted into categories based on the folder it came from.

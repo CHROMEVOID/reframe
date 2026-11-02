@@ -24,6 +24,13 @@ contextBridge.exposeInMainWorld('cap', {
   onRedirect: (fn) => ipcRenderer.on('cap:redirect', (_e, u) => fn(u)),
   paged: (cbz) => ipcRenderer.invoke('cap:paged', cbz),
   onPagedProgress: (fn) => ipcRenderer.on('cap:pagedProgress', (_e, n) => fn(n)),
+  pickControls: () => ipcRenderer.invoke('cap:pickControls'),
+  cancelPick: () => ipcRenderer.invoke('cap:cancelPick'),
+  lastControls: () => ipcRenderer.invoke('cap:lastControls'),
+  clickThrough: (opts) => ipcRenderer.invoke('cap:clickThrough', opts),
+  stopClicking: () => ipcRenderer.invoke('cap:stopClicking'),
+  onClickProgress: (fn) => ipcRenderer.on('cap:clickProgress', (_e, p) => fn(p)),
+  onLook: (fn) => ipcRenderer.on('cap:look', (_e, a) => fn(a)),
   onClosePanel: (fn) => ipcRenderer.on('cap:closePanel', () => fn()),
   onOpenPanel: (fn) => ipcRenderer.on('cap:openPanel', (_e, mode) => fn(mode)),
 });

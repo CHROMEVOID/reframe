@@ -79,8 +79,8 @@ const fileNameOf = (u, fallback) => {
 };
 
 class Capture {
-  constructor({ rendererUrl, preload, dataDir, icon, onDownload, onFile, onBookmark, onPictures, settings, saveSettings, ffmpeg }) {
-    Object.assign(this, { rendererUrl, preload, icon, onDownload, onFile, onBookmark, onPictures, settings, saveSettings, ffmpeg });
+  constructor({ rendererUrl, preload, dataDir, icon, onDownload, onFile, onBookmark, onPictures, settings, appearance, saveSettings, ffmpeg }) {
+    Object.assign(this, { rendererUrl, preload, icon, onDownload, onFile, onBookmark, onPictures, settings, appearance, saveSettings, ffmpeg });
     this.adCache = path.join(dataDir, 'adblock-ads-engine-v2.bin');
     this.bundledAds = path.join(__dirname, '..', 'assets', 'adblock-ads.bin');
     this.previewDir = path.join(dataDir, 'capture-previews');
@@ -115,7 +115,7 @@ class Capture {
 
     this.win = new BaseWindow({ width: 1280, height: 860, minWidth: 760, minHeight: 500, title: 'Reframe — Capture browser', backgroundColor: '#ffffff', icon: this.icon });
     this.bar = new WebContentsView({ webPreferences: { preload: this.preload, contextIsolation: true, sandbox: true } });
-    this.page = new WebContentsView({ webPreferences: { partition: PARTITION, sandbox: true, contextIsolation: true } });
+    this.page = new WebContentsView({ webPreferences: { partition: PARTITION, sandbox: true, contextIsolation: true, backgroundThrottling: false } });
     this.bar.setBackgroundColor('#101218');
     this.page.setBackgroundColor('#ffffff');
     this.win.contentView.addChildView(this.page);
@@ -167,6 +167,9 @@ class Capture {
     wc.on('did-navigate', () => {
       this.found = [];
       this.sendFound();
+      // While Reframe is clicking through a reader page by page, its progress
+      // and Stop button stay on screen.
+      if (this.clicking) return;
       this.setPanel(0);
       if (this.bar && !this.bar.webContents.isDestroyed()) this.bar.webContents.send('cap:closePanel');
     });
@@ -379,6 +382,12 @@ class Capture {
     this.statsTimer = setTimeout(() => this.sendStats(), 250);
   }
 
+  // The toolbar uses the same theme and accent colour as the main window.
+  sendLook() {
+    if (!this.bar || this.bar.webContents.isDestroyed() || !this.appearance) return;
+    this.bar.webContents.send('cap:look', this.appearance());
+  }
+
   sendStats() {
     if (!this.bar || this.bar.webContents.isDestroyed()) return;
     const site = this.page ? siteOf(this.page.webContents.getURL()) : '';
@@ -432,7 +441,7 @@ class Capture {
           const add = (u, how) => { if (u && /^https?:/i.test(u)) out.push([u, how]); };
           document.querySelectorAll('video, audio, source').forEach((v) => add(v.currentSrc || v.src || v.getAttribute('data-src'), 'player'));
           document.querySelectorAll('meta[property^="og:video"], meta[name="twitter:player:stream"]').forEach((m) => add(m.content, 'page info'));
-          const text = Array.from(document.scripts).map((s) => s.textContent).join('\\n').slice(0, 3000000) + document.documentElement.outerHTML.slice(0, 2000000);
+          const text = Array.from(document.scripts).map((s) => s.textContent).join('\\n').slice(0, 3000000) + (document.documentElement ? document.documentElement.outerHTML.slice(0, 2000000) : '');
           const re = /https?:(?:\\\\?\\/){2}[^"'\\s<>()]+?\\.(?:m3u8|mpd|mp4|webm|m4v|mov|flv)(?:\\?[^"'\\s<>()]*)?/gi;
           for (const m of text.matchAll(re)) add(m[0].replace(/\\\\\\//g, '/'), 'page data');
           document.querySelectorAll('iframe').forEach((f) => { if (/youtube|vimeo|dailymotion|streamable|player|embed|video/i.test(f.src)) add(f.src, 'embedded player'); });
@@ -665,87 +674,136 @@ class Capture {
     await new Promise((r) => setTimeout(r, 1500));
   }
 
-  // One-picture-per-page readers: follow "Next" from page to page and gather
-  // every page of the chapter, then save them together.
+  // One-picture-per-page readers: follow "Next" links from page to page, or,
+  // for readers that change page in place (arrow buttons, arrow keys,
+  // clicking the side of the page), keep turning — see page-turner.js.
   async collectPaged(cbz, onProgress) {
+    const { turnPages, onScreen } = require('./page-turner');
     const start = this.page.webContents.getURL();
     const w = this.hiddenWindow();
     const images = [];
     const seenPages = new Set();
     const seenImgs = new Set();
+    const keep = (pics) => {
+      for (const p of pics) if (!seenImgs.has(p.url)) {
+        seenImgs.add(p.url);
+        images.push(p);
+      }
+    };
     let url = start;
     let title = this.page.webContents.getTitle();
     try {
       for (let i = 0; i < 500 && url && !seenPages.has(url); i++) {
         seenPages.add(url);
-        if (onProgress) onProgress(i + 1);
+        if (onProgress) onProgress(images.length + 1);
         await this.loadIn(w, url);
         const r = await this.collectPictures(w.webContents).catch(() => null);
         if (!r) break;
         if (i === 0) title = r.title || title;
-        // The page's main picture is its biggest one.
-        const main = [...r.images].sort((a, b) => b.w * b.h - a.w * a.h)[0];
-        if (main && !seenImgs.has(main.url)) {
-          seenImgs.add(main.url);
-          images.push(main);
-        }
+        // The page's picture (or both pages of a two-page spread).
+        keep(await onScreen(w.webContents));
         url = r.next && siteOf(r.next) === siteOf(start) ? r.next : null;
-        // No "Next" link on the very first page: try a reader that turns
-        // pages with the arrow keys instead (either direction).
+        // No "Next" link on the very first page: the reader turns pages in place.
         if (!url && i === 0) {
-          await this.collectByKeys(w, images, seenImgs, onProgress);
+          await turnPages(w, images, seenImgs, onProgress, { sameSite: (u) => siteOf(u) === siteOf(start) });
           break;
         }
       }
     } finally {
       w.destroy();
     }
-    if (!images.length) throw new Error('No pages found.');
+    if (!images.length) throw new Error('No pages found. Open the first page of a chapter (not the chapter list) and try again.');
     let site = 'Web';
     try {
-      site = new URL(start).hostname.replace(/^www\./, '');
+      site = new URL(start).hostname.replace(/^www./, '');
     } catch { /* keep Web */ }
     this.onPictures({ title, site, images, cbz, fetcher: this.fetcherFor(start) });
     return images.length;
   }
 
-  // Arrow-key readers: press a key, see whether the main picture changed,
-  // keep going in the direction that turns pages forward. Manga readers
-  // often go forward with Left, others with Right.
-  async collectByKeys(w, images, seenImgs, onProgress) {
-    const { pageScan } = require('./picture-scan');
-    const mainPic = async () => {
-      const r = await w.webContents.executeJavaScript(`(${pageScan.toString()})({ scroll: false })`, true).catch(() => null);
-      return r && [...r.images].sort((a, b) => b.w * b.h - a.w * a.h)[0];
-    };
-    const press = async (key) => {
-      w.webContents.focus();
-      w.webContents.sendInputEvent({ type: 'keyDown', keyCode: key });
-      w.webContents.sendInputEvent({ type: 'keyUp', keyCode: key });
-      await new Promise((r) => setTimeout(r, 900));
-    };
-    let dir = null;
-    for (const key of ['Right', 'Left', 'PageDown', 'Space']) {
-      await press(key);
-      const m = await mainPic();
-      if (m && !seenImgs.has(m.url)) {
-        dir = key;
-        seenImgs.add(m.url);
-        images.push(m);
-        break;
+  // ---------- "I click Next" readers ----------
+  // The person shows Reframe the reader's Next and Previous buttons (the page
+  // doesn't react to those clicks), then Reframe clicks Next itself, in the
+  // visible page, saving each new picture until the pages stop changing.
+  async pickControls() {
+    const { pickControls } = require('./page-turner');
+    const wc = this.page.webContents;
+    wc.focus();
+    const c = await wc.executeJavaScript(`(${pickControls.toString()})()`, true).catch(() => null);
+    if (c) {
+      this.controlsBySite = this.controlsBySite || {};
+      this.controlsBySite[siteOf(wc.getURL())] = c;
+    }
+    return c;
+  }
+
+  cancelPick() {
+    if (this.page) this.page.webContents.executeJavaScript('window.__reframeCancelPick && window.__reframeCancelPick()', true).catch(() => {});
+  }
+
+  lastControls() {
+    return (this.controlsBySite || {})[siteOf(this.page.webContents.getURL())] || null;
+  }
+
+  async clickThrough({ controls, fromStart = false, cbz = true }, onProgress) {
+    const wc = this.page.webContents;
+    const start = wc.getURL();
+    this.stopClicking = false;
+    this.clicking = true;
+    try {
+      return await this.clickPages(wc, controls, fromStart, cbz, onProgress, start);
+    } finally {
+      this.clicking = false;
+      try {
+        if (wc.debugger.isAttached()) wc.debugger.detach();
+      } catch { /* already gone */ }
+    }
+  }
+
+  async clickPages(wc, controls, fromStart, cbz, onProgress, start) {
+    const { onScreen, clickControl, waitForNew } = require('./page-turner');
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const keyOf = (pics) => pics.map((p) => p.url).join('|');
+    // Go back to the first page first, if asked: press Back until nothing changes.
+    if (fromStart && controls.prev) {
+      let last = keyOf(await onScreen(wc));
+      for (let i = 0, same = 0; i < 500 && same < 2 && !this.stopClicking; i++) {
+        if (!(await clickControl(wc, controls.prev))) break; // no Back button: this is page 1
+        await sleep(1100);
+        const now = keyOf(await onScreen(wc));
+        if (now === last) same++;
+        else same = 0;
+        last = now;
+        if (onProgress) onProgress({ phase: 'rewind', n: i + 1 });
       }
     }
-    if (!dir) return;
-    for (let i = 0, stuck = 0; i < 500 && stuck < 3; i++) {
-      if (onProgress) onProgress(images.length + 1);
-      await press(dir);
-      const m = await mainPic();
-      if (m && !seenImgs.has(m.url)) {
-        seenImgs.add(m.url);
-        images.push(m);
+    const title = wc.getTitle();
+    const images = [];
+    const seen = new Set();
+    const keep = (pics) => {
+      for (const p of pics) if (!seen.has(p.url)) {
+        seen.add(p.url);
+        images.push(p);
+      }
+      if (onProgress) onProgress({ phase: 'collect', n: images.length });
+    };
+    keep(await onScreen(wc));
+    for (let stuck = 0; images.length < 2000 && stuck < 2 && !this.stopClicking;) {
+      if (!(await clickControl(wc, controls.next))) break; // no Next button: last page
+      // Pages that load a new address need longer than ones that swap in place.
+      const fresh = await waitForNew(wc, seen, 18);
+      if (fresh.length && siteOf(wc.getURL()) === siteOf(start)) {
+        keep(fresh);
         stuck = 0;
       } else stuck++;
     }
+    if (!images.length) throw new Error('No pages found. Pick the buttons again and make sure the picture is on screen.');
+    let site = 'Web';
+    try {
+      site = new URL(start).hostname.replace(/^www./, '');
+    } catch { /* keep Web */ }
+    this.onPictures({ title, site, images, cbz, fetcher: this.fetcherFor(start) });
+    return images.length;
   }
 
   // For a list of links (e.g. chapters from a .txt file): open each one in a
@@ -827,6 +885,11 @@ class Capture {
     const h = (ch, fn) => ipcMain.handle(ch, (e, arg) => (own(e) ? fn(arg) : null));
     h('cap:preview', (id) => this.preview(id));
     h('cap:pictures', () => this.findPictures());
+    h('cap:pickControls', () => this.pickControls());
+    h('cap:cancelPick', () => this.cancelPick());
+    h('cap:lastControls', () => this.lastControls());
+    h('cap:clickThrough', (opts) => this.clickThrough(opts || {}, (p) => this.bar.webContents.send('cap:clickProgress', p)));
+    h('cap:stopClicking', () => { this.stopClicking = true; });
     h('cap:paged', (cbz) => this.collectPaged(cbz !== false, (n) => this.bar.webContents.send('cap:pagedProgress', n)));
     h('cap:wake', () => this.wake());
     h('cap:savePictures', (cbz) => this.savePictures(!!cbz));
@@ -880,6 +943,7 @@ class Capture {
     });
     h('cap:hello', () => {
       this.setPanel(0);
+      this.sendLook();
       this.sendState();
       this.sendFound();
       this.sendStats();

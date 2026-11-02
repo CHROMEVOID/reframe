@@ -45,9 +45,11 @@ function setPanel(v) {
   $('panel').classList.toggle('open', open);
   if (open) drawPanel();
   else {
+    stopPicking();
     $('panel').querySelectorAll('video').forEach((v2) => { v2.pause(); v2.removeAttribute('src'); v2.load(); });
     $('panel').innerHTML = '';
   }
+  if (typeof markOpen === 'function') markOpen();
   report();
 }
 
@@ -154,7 +156,108 @@ function card(f) {
   return row;
 }
 
-async function drawPictures() {
+// Progress for "Collect every page" goes to whichever button is showing now
+// (listening once, so redrawing the panel doesn't pile up listeners).
+let pagedButton = null;
+window.cap.onPagedProgress((n) => {
+  if (pagedButton && pagedButton.isConnected && !pagedButton.classList.contains('done')) pagedButton.textContent = `Collecting… page ${n}`;
+});
+
+// ---------- Pictures: first ask how the reader turns pages ----------
+let picking = false;
+function stopPicking() {
+  if (picking) window.cap.cancelPick();
+  picking = false;
+}
+const el = (tag, cls, text) => {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+};
+const button = (label, cls, onclick) => {
+  const b = el('button', `dl ${cls || ''}`, label);
+  b.onclick = onclick;
+  return b;
+};
+
+function drawPictures() {
+  stopPicking();
+  const p = $('panel');
+  p.innerHTML = '';
+  const head = el('div', 'hint');
+  head.innerHTML = '<b>How does this reader show its pages?</b><br>Pick one and Reframe takes it from there. Every page is saved in order, as a folder or one <b>.cbz</b> comic.';
+  const acts = el('div', 'pactions choose');
+  acts.append(
+    button('⇅  It scrolls (down or sideways)', 'primary2', () => scanPictures()),
+    button('⇆  I click Next / arrow buttons', 'primary2', () => drawClickMode()),
+    button('Not sure: work it out for me', '', () => scanPictures()),
+  );
+  p.append(head, acts);
+}
+
+// "I click Next": the person points at the Next and Previous buttons, then
+// Reframe clicks through the pages itself.
+let clickStatus = null;
+window.cap.onClickProgress((pr) => {
+  if (!clickStatus || !clickStatus.isConnected) return;
+  clickStatus.textContent = pr.phase === 'rewind' ? `Going back to the first page… (${pr.n})` : `Turning pages… ${pr.n} saved so far`;
+});
+
+async function drawClickMode(controls) {
+  stopPicking();
+  const p = $('panel');
+  p.innerHTML = '';
+  if (!controls) {
+    const last = await window.cap.lastControls();
+    const head = el('div', 'hint');
+    head.innerHTML = '<b>Show Reframe the buttons.</b> On the page below, click the reader’s <b>Next</b> button, then its <b>Previous</b> (back) button. The page won’t react to those two clicks. Press <b>Esc</b> to cancel.';
+    const acts = el('div', 'pactions');
+    acts.append(button('Cancel', '', () => drawPictures()));
+    if (last) acts.append(button('Use the same buttons as last time', 'primary2', () => drawClickMode(last)));
+    p.append(head, acts);
+    picking = true;
+    controls = await window.cap.pickControls();
+    if (!picking) return; // cancelled from the panel
+    picking = false;
+    if (!controls) return drawPictures();
+    if (!open || mode !== 'pictures') return;
+    p.innerHTML = '';
+  }
+  const head = el('div', 'hint');
+  head.innerHTML = '<b>Buttons set ✓</b> Reframe will press <b>Next</b> on the page below and save every new picture until the pages stop changing. You can watch it happen, and stop it any time.';
+  const opts = el('label', 'popt');
+  const fromStart = el('input');
+  fromStart.type = 'checkbox';
+  opts.append(fromStart, document.createTextNode(' Start from the first page (presses Back until it can’t go further)'));
+  const acts = el('div', 'pactions');
+  const run = (cbz) => async () => {
+    p.innerHTML = '';
+    clickStatus = el('div', 'hint', 'Turning pages…');
+    const stop = button('Stop and save what’s collected', '', () => { window.cap.stopClicking(); stop.textContent = 'Stopping…'; stop.disabled = true; });
+    const row = el('div', 'pactions');
+    row.append(stop);
+    p.append(clickStatus, row);
+    try {
+      const n = await window.cap.clickThrough({ controls, fromStart: fromStart.checked, cbz });
+      clickStatus.textContent = `Saving ${n} page${n === 1 ? '' : 's'} ✓ Follow it in Reframe’s Activity.`;
+      stop.remove();
+      toast(`Saving ${n} pages${cbz ? ' as one comic' : ''}. Follow it in Reframe’s Activity.`);
+    } catch (e) {
+      clickStatus.textContent = clean(e);
+      stop.remove();
+    }
+    row.append(button('Do another chapter', '', () => drawClickMode(controls)), button('Pick different buttons', '', () => drawClickMode()));
+  };
+  acts.append(
+    button('Click through & save as comic (.cbz)', 'primary2', run(true)),
+    button('Click through & save as folder', '', run(false)),
+    button('Pick the buttons again', '', () => drawClickMode()),
+  );
+  p.append(head, opts, acts);
+}
+
+async function scanPictures() {
   const p = $('panel');
   p.innerHTML = '<div class="hint"><b>Looking through the page…</b> Reframe scrolls through it (and any reader box inside it) so every picture loads, then puts them in reading order.</div>';
   try {
@@ -201,12 +304,13 @@ async function drawPictures() {
     return b;
   };
   acts.append(mk('Save as comic (.cbz)', true, 'primary2'), mk('Save as folder', false));
-  // Readers that show one page at a time: follow "Next" to get the whole chapter.
+  // Readers that show one page at a time: follow "Next", or turn the pages
+  // (arrow buttons, arrow keys, clicking the page) to get the whole chapter.
   if (pics.paged) {
     const b = document.createElement('button');
     b.className = 'dl primary2';
     b.textContent = 'Collect every page (one-at-a-time reader)';
-    b.title = 'This reader shows one page at a time: Reframe follows its Next links and gathers the whole chapter';
+    b.title = 'This reader shows one page at a time. Reframe turns the pages for you (Next links, arrow buttons, arrow keys or clicking the page, sideways readers included) and gathers the whole chapter';
     b.onclick = async () => {
       b.textContent = 'Collecting… page 1';
       try {
@@ -219,7 +323,7 @@ async function drawPictures() {
         toast(clean(e), true);
       }
     };
-    window.cap.onPagedProgress((n) => { if (!b.classList.contains('done')) b.textContent = `Collecting… page ${n}`; });
+    pagedButton = b;
     acts.prepend(b);
   }
   p.append(head, grid, acts);
@@ -237,6 +341,7 @@ function wakeButton() {
 function drawPanel() {
   const p = $('panel');
   if (mode === 'pictures') return drawPictures();
+  stopPicking();
   p.innerHTML = '';
   if (!found.length) {
     p.innerHTML = '<div class="hint"><b>No video spotted yet.</b><br>Press play on the video — Reframe watches what the page loads and lists every video here with a preview (ads are left out). Or press <b>Download this page</b>: the downloader knows 1,700+ sites and can also read the page for videos.</div>';
@@ -268,7 +373,51 @@ function openMode(m) {
   const same = mode === m;
   mode = m;
   setPanel(same ? !open : true);
+  markOpen();
 }
+
+// Pictures / Found light up while their panel is open.
+function markOpen() {
+  $('pics').classList.toggle('on', open && mode === 'pictures');
+  $('found').classList.toggle('on', open && mode === 'videos');
+}
+
+// Same theme and accent colour as the main Reframe window (see appearance.js).
+function applyLook(a) {
+  if (!a) return;
+  const root = document.documentElement.style;
+  const theme = THEMES[a.theme] ? a.theme : 'graphite';
+  let g;
+  let accent;
+  if (a.accent === 'custom' && /^#[0-9a-f]{6}$/i.test(a.custom || '')) {
+    accent = a.custom;
+    g = [shade(accent, 0.35), accent, shade(accent, -0.35)];
+  } else {
+    const p = ACCENTS[a.accent] || ACCENTS.ember;
+    g = p.g;
+    accent = p.a;
+  }
+  const light = theme === 'light';
+  if (light && luminance(accent) > 0.6) {
+    accent = shade(accent, -0.55);
+    g = g.map((c) => shade(c, -0.5));
+  }
+  const t = THEMES[theme];
+  root.setProperty('--g1', g[0]);
+  root.setProperty('--g2', g[1]);
+  root.setProperty('--g3', g[2]);
+  root.setProperty('--accent', accent);
+  root.setProperty('--on-accent', luminance(g[1]) > 0.55 ? '#111' : '#fff');
+  root.setProperty('--bg', light ? '#f4f5f8' : t.bg === '#000000' ? '#08080b' : shade(t.bg, 0.03));
+  root.setProperty('--panel', light ? '#ffffff' : t.panel);
+  root.setProperty('--field', light ? '#e9ecf2' : t.bg);
+  root.setProperty('--toast', light ? '#ffffff' : shade(t.panel, 0.06));
+  root.setProperty('--fg-rgb', light ? '20,24,32' : '255,255,255');
+  root.setProperty('--text', light ? '#161a22' : '#eef0f5');
+  root.setProperty('--text-2', light ? '#4a5164' : t.text);
+  root.setProperty('--text-3', light ? '#7a8194' : '#6d7384');
+}
+window.cap.onLook(applyLook);
 
 $('back').onclick = () => window.cap.nav('back');
 $('fwd').onclick = () => window.cap.nav('forward');
