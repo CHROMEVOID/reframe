@@ -6,7 +6,7 @@ const HELP = [
     'Drop a folder on the window (or press Choose folder / Ctrl+O). Every video inside it — and inside every folder within it — is converted with HandBrake.',
     'You get a new folder next to the original, named “… converted”, with exactly the same layout. Photos, subtitles and other files are copied too.',
     'Your originals are only ever read — never changed, moved or deleted.',
-    'Presets come from your HandBrake app, so your own (like PsVita) are there. Turbo uses your graphics card; Auto speed converts a few videos side by side when that helps.',
+    'Presets come from your HandBrake app, so any presets you made yourself are there too. Turbo uses your graphics card; Auto speed converts a few videos side by side when that helps.',
     'Run the same folder again later and only new videos are converted.',
   ]],
   ['download', 'Download a video', [
