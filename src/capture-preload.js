@@ -1,0 +1,29 @@
+'use strict';
+const { contextBridge, ipcRenderer } = require('electron');
+
+contextBridge.exposeInMainWorld('cap', {
+  hello: () => ipcRenderer.invoke('cap:hello'),
+  go: (url) => ipcRenderer.invoke('cap:go', url),
+  nav: (cmd) => ipcRenderer.invoke('cap:nav', cmd),
+  panel: (open) => ipcRenderer.invoke('cap:panel', open),
+  download: (what) => ipcRenderer.invoke('cap:download', what),
+  onState: (fn) => ipcRenderer.on('cap:state', (_e, s) => fn(s)),
+  onFound: (fn) => ipcRenderer.on('cap:found', (_e, f) => fn(f)),
+  onNote: (fn) => ipcRenderer.on('cap:note', (_e, m) => fn(m)),
+  onFile: (fn) => ipcRenderer.on('cap:file', (_e, name) => fn(name)),
+  preview: (id) => ipcRenderer.invoke('cap:preview', id),
+  pictures: () => ipcRenderer.invoke('cap:pictures'),
+  wake: () => ipcRenderer.invoke('cap:wake'),
+  retry: (withoutAds) => ipcRenderer.invoke('cap:retry', withoutAds),
+  onFailed: (fn) => ipcRenderer.on('cap:failed', (_e, f) => fn(f)),
+  savePictures: (cbz) => ipcRenderer.invoke('cap:savePictures', cbz),
+  bookmark: () => ipcRenderer.invoke('cap:bookmark'),
+  toggle: (what) => ipcRenderer.invoke('cap:toggle', what),
+  allowRedirect: () => ipcRenderer.invoke('cap:allowRedirect'),
+  onStats: (fn) => ipcRenderer.on('cap:stats', (_e, s) => fn(s)),
+  onRedirect: (fn) => ipcRenderer.on('cap:redirect', (_e, u) => fn(u)),
+  paged: (cbz) => ipcRenderer.invoke('cap:paged', cbz),
+  onPagedProgress: (fn) => ipcRenderer.on('cap:pagedProgress', (_e, n) => fn(n)),
+  onClosePanel: (fn) => ipcRenderer.on('cap:closePanel', () => fn()),
+  onOpenPanel: (fn) => ipcRenderer.on('cap:openPanel', (_e, mode) => fn(mode)),
+});

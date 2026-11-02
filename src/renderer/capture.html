@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self'; worker-src blob:">
+  <title>Capture browser</title>
+  <style>
+    :root { --bg: #101218; --panel: #171a22; --line: rgba(255,255,255,.09); --text: #eef0f5; --text-2: #a6acba; --text-3: #6d7384;
+      --grad: linear-gradient(135deg, #ffb04a, #ff4f73 55%, #9b5cff); --accent: #ff5e62; --ok: #3ddc97; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13.5px/1.4 "Segoe UI Variable Text", "Segoe UI", sans-serif; overflow: hidden; user-select: none; }
+    .bar { height: 58px; display: flex; align-items: center; gap: 6px; padding: 0 10px; background: var(--bg); border-bottom: 1px solid var(--line); }
+    .logo { width: 26px; height: 26px; margin: 0 6px 0 2px; }
+    button { font: inherit; color: inherit; border: 0; background: transparent; cursor: pointer; border-radius: 9px; transition: background .15s, transform .2s cubic-bezier(.34,1.56,.64,1); }
+    .ib { width: 34px; height: 34px; display: grid; place-items: center; color: var(--text-2); }
+    .ib:hover { background: rgba(255,255,255,.07); color: var(--text); }
+    .ib:disabled { opacity: .3; pointer-events: none; }
+    .url { flex: 1; min-width: 120px; height: 38px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-radius: 11px; background: #0b0c10; border: 1px solid var(--line); color: var(--text-3); }
+    .url:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255,94,98,.18); }
+    .url input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; user-select: text; }
+    .spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(255,255,255,.15); border-top-color: var(--accent); animation: s .8s linear infinite; visibility: hidden; }
+    .loading .spin { visibility: visible; }
+    @keyframes s { to { transform: rotate(360deg); } }
+    .pill { height: 38px; padding: 0 14px; display: inline-flex; align-items: center; gap: 8px; font-weight: 600; white-space: nowrap; }
+    .pill:hover { transform: translateY(-1px) scale(1.03); }
+    .primary { background: var(--grad); color: #fff; box-shadow: 0 8px 20px -10px #ff4f73; }
+    .found { background: rgba(255,255,255,.06); color: var(--text-2); position: relative; }
+    .found.has { color: var(--text); background: rgba(61,220,151,.13); }
+    .found.has .n { background: var(--ok); color: #062; }
+    .n { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: rgba(255,255,255,.12); display: grid; place-items: center; font-size: 11.5px; font-weight: 700; }
+    .found.pulse { animation: p .9s; }
+    @keyframes p { 30% { transform: scale(1.12); } }
+    .panel { position: absolute; top: 58px; left: 0; right: 0; max-height: 540px; overflow: auto; background: var(--panel); border-bottom: 1px solid var(--line); box-shadow: 0 18px 40px -18px rgba(0,0,0,.8); padding: 8px 14px 12px; display: none; animation: in .18s ease; }
+    .panel.open { display: block; }
+    @keyframes in { from { opacity: 0; transform: translateY(-6px); } }
+    .hint { color: var(--text-2); padding: 10px 10px 12px; line-height: 1.5; }
+    .hint b { color: var(--text); }
+    .item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 10px; }
+    .item:hover { background: rgba(255,255,255,.05); }
+    .tag { font-size: 10.5px; font-weight: 700; padding: 3px 7px; border-radius: 6px; background: rgba(255,255,255,.08); color: var(--text-2); }
+    .tag.HLS, .tag.DASH { background: rgba(110,168,255,.15); color: #9cc2ff; }
+    .meta { flex: 1; min-width: 0; }
+    .t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .u { color: var(--text-3); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dl { height: 32px; padding: 0 12px; background: rgba(255,255,255,.08); font-weight: 600; }
+    .dl:hover { background: var(--accent); color: #fff; }
+    .dl.done { background: rgba(61,220,151,.15); color: var(--ok); pointer-events: none; }
+    .shield { height: 38px; padding: 0 10px; display: inline-flex; align-items: center; gap: 6px; color: var(--ok); background: rgba(61,220,151,.1); font-weight: 600; font-size: 12.5px; }
+    .shield.off { color: var(--text-3); background: rgba(255,255,255,.05); }
+    .star.on { color: #ffd166; }
+    .redirect { position: absolute; left: 150px; right: 10px; top: 8px; height: 42px; z-index: 5; display: none; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 11px; background: #2a2116; color: #ffd58a; box-shadow: 0 12px 30px rgba(0,0,0,.6); }
+    .redirect.show { display: flex; animation: in .2s ease; }
+    .redirect span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .redirect button { padding: 5px 10px; background: rgba(255,255,255,.1); font-weight: 600; }
+    .panel-head { display: flex; align-items: center; gap: 10px; padding: 6px 8px 10px; }
+    .panel-head .hint { flex: 1; padding: 0; }
+    .item { align-items: stretch; }
+    .pv { position: relative; width: 168px; aspect-ratio: 16/9; flex: none; border-radius: 9px; overflow: hidden; background: #0b0c10; cursor: pointer; display: grid; place-items: center; color: var(--text-3); font-size: 11.5px; }
+    .pv img, .pv video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    .pv video { object-fit: contain; background: #000; }
+    .pv > span:first-child:not(.play) { position: absolute; left: 8px; bottom: 6px; font-size: 10.5px; z-index: 1; }
+    .pv .play { position: absolute; width: 34px; height: 34px; border-radius: 50%; background: rgba(255,255,255,.9); color: #111; display: grid; place-items: center; transition: transform .2s; }
+    .pv:hover .play { transform: scale(1.12); }
+    .pv .dur { position: absolute; right: 6px; bottom: 6px; background: rgba(0,0,0,.7); color: #fff; font-size: 10.5px; font-weight: 700; padding: 1px 5px; border-radius: 4px; }
+    .meta .facts { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+    .fact { font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 6px; background: rgba(255,255,255,.07); color: var(--text-2); }
+    .item .side { display: flex; flex-direction: column; justify-content: center; }
+    .pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; margin: 4px 0 12px; }
+    .pgrid img { width: 100%; aspect-ratio: 3/4; object-fit: cover; border-radius: 7px; background: #0b0c10; }
+    .pactions { display: flex; gap: 8px; align-items: center; }
+    .pactions .dl.primary2 { background: var(--grad); color: #fff; }
+    .toast { position: absolute; left: 50%; top: 66px; transform: translateX(-50%); background: #20242e; padding: 8px 14px; border-radius: 10px; box-shadow: 0 12px 30px rgba(0,0,0,.6); display: none; white-space: nowrap; }
+    .toast.show { display: block; animation: in .2s ease; }
+    .toast.err { color: #ffb0b8; }
+  </style>
+</head>
+<body>
+  <div class="bar" id="bar">
+    <img class="logo" src="assets/logo.svg" alt="">
+    <button class="ib" id="back" title="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14.5 6l-6 6 6 6"/></svg></button>
+    <button class="ib" id="fwd" title="Forward"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9.5 6l6 6-6 6"/></svg></button>
+    <button class="ib" id="reload" title="Reload"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 8.5M20 4v4.5h-4.5"/></svg></button>
+    <label class="url"><span class="spin"></span><input id="url" spellcheck="false" placeholder="Type a website or search"></label>
+    <button class="ib star" id="star" title="Save this site to Other sites"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3.5l2.6 5.3 5.8.85-4.2 4.1 1 5.8L12 16.8l-5.2 2.75 1-5.8-4.2-4.1 5.8-.85z"/></svg></button>
+    <button class="pill shield" id="shield" title="Ad blocker (uBlock Origin filter lists). Click to turn off for troublesome sites."><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7.5 3v5.5c0 4.6-3.2 8.3-7.5 9.5-4.3-1.2-7.5-4.9-7.5-9.5V6z"/></svg><span id="blocked">0</span></button>
+    <button class="pill found" id="pics" title="Save the pictures on this page — comic pages, galleries — as a folder or one .cbz comic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v14H4zM4 15l4.5-4.5 4 4L16 11l4 4M9 9h.01"/></svg>Pictures</button>
+    <button class="pill found" id="found" title="Videos found on this page"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 3.5H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM10.25 11.25v5l4-2.5z"/></svg>Found <span class="n" id="count">0</span></button>
+    <button class="pill primary" id="page" title="Let the downloader grab the video on this page"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 3.5v12M7 11l5 5 5-5M4.5 20h15"/></svg>Download this page</button>
+  </div>
+  <div class="panel" id="panel"></div>
+  <div class="redirect" id="redirect"><span id="redirectText"></span><button id="allow">Go there</button><button id="dismiss">Stay here</button></div>
+  <div class="redirect" id="failed"><span id="failedText"></span><button id="retry">Retry</button><button id="retryNoAds">Retry without ad blocker</button><button id="failedX">✕</button></div>
+  <div class="toast" id="toast"></div>
+  <script src="vendor/hls.min.js"></script>
+  <script src="capture-ui.js"></script>
+</body>
+</html>

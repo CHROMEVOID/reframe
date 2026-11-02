@@ -1,0 +1,14 @@
+Reframe — 18+ content switch
+
+While this file is here, Reframe works normally: the 18+ (adult) site list stays
+hidden until someone turns it on in Settings and confirms they are 18 or older.
+
+DELETE THIS FILE to remove every 18+ part of Reframe:
+  - the built-in adult sites disappear from the Downloader
+  - the "Show 18+ sites" switch disappears from Settings and can never be turned on
+
+Links in your own .txt files (Documents > Reframe Other Sites) still show,
+because those are yours.
+
+To bring 18+ back, put a file with exactly this name back next to Reframe.exe
+and restart Reframe.

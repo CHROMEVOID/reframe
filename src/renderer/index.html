@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en" data-theme="graphite" data-motion="full">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: https:; media-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>Reframe</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="fx.css">
+</head>
+<body>
+  <div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
+
+  <div class="splash" id="splash" aria-hidden="true">
+    <div class="splash-inner">
+      <img class="splash-logo" src="assets/logo.svg" alt="" width="96" height="96">
+      <div class="splash-name">Reframe</div>
+      <div class="splash-slogan">You reframe a picture. <b>We reframe a video.</b></div>
+    </div>
+  </div>
+
+  <header class="titlebar">
+    <div class="brand">
+      <img src="assets/logo.svg" alt="" width="24" height="24">
+      <span>Reframe</span>
+      <span class="brand-slogan">We reframe a video.</span>
+    </div>
+    <div class="title-status" id="titleStatus" hidden></div>
+  </header>
+
+  <div class="shell">
+    <nav class="sidebar" id="sidebar">
+      <div class="nav-pill" id="navPill"></div>
+      <button class="nav-item" data-page="home"><span data-icon="sparkles"></span><span>Home</span></button>
+      <button class="nav-item" data-page="convert"><span data-icon="convert"></span><span>Convert</span></button>
+      <button class="nav-item" data-page="download"><span data-icon="download"></span><span>Downloader</span></button>
+      <button class="nav-item" data-page="sources"><span data-icon="cloud"></span><span>Drives &amp; servers</span></button>
+      <button class="nav-item" data-page="activity"><span data-icon="activity"></span><span>Activity</span><b class="nav-badge" id="activityBadge" hidden></b></button>
+      <button class="nav-item" data-page="library"><span data-icon="library"></span><span>Media library</span><b class="nav-count" id="libraryCount"></b></button>
+      <div class="nav-spacer"></div>
+      <button class="nav-item" data-page="help"><span data-icon="info"></span><span>Help</span></button>
+      <button class="nav-item" data-page="settings"><span data-icon="settings"></span><span>Settings</span></button>
+      <div class="engine-card" id="engineCard"></div>
+      <button class="credit-chip" id="creditChip" title="Follow chr0m3void on TikTok">
+        <span data-icon="tiktok" data-size="15"></span><span>made by <b>@chr0m3void</b></span>
+      </button>
+    </nav>
+
+    <main class="main">
+      <section class="page" id="page-home"></section>
+      <section class="page" id="page-convert"></section>
+      <section class="page" id="page-download"></section>
+      <section class="page" id="page-sources"></section>
+      <section class="page" id="page-activity"></section>
+      <section class="page" id="page-library"></section>
+      <section class="page" id="page-settings"></section>
+      <section class="page" id="page-help"></section>
+    </main>
+  </div>
+
+  <div class="scan-pill" id="scanPill" hidden></div>
+
+  <div class="drop-veil" id="dropVeil">
+    <div class="drop-veil-inner">
+      <span data-icon="folderDown" data-size="44"></span>
+      <h2 id="dropVeilTitle">Drop the folder to convert it</h2>
+      <p id="dropVeilText">Everything inside, including every folder within it, comes along.</p>
+    </div>
+  </div>
+  <canvas class="confetti" id="confetti"></canvas>
+  <div id="layer"></div>
+  <div class="toasts" id="toasts"></div>
+
+  <script src="icons.js"></script>
+  <script src="ui.js"></script>
+  <script src="fx.js"></script>
+  <script src="appearance.js"></script>
+  <script src="convert.js"></script>
+  <script src="sites.js"></script>
+  <script src="dl.js"></script>
+  <script src="sitelists.js"></script>
+  <script src="sources.js"></script>
+  <script src="activity.js"></script>
+  <script src="library.js"></script>
+  <script src="settings.js"></script>
+  <script src="help.js"></script>
+  <script src="home.js"></script>
+  <script src="palette.js"></script>
+  <script src="setup.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

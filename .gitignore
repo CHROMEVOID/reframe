@@ -1,0 +1,26 @@
+# dependencies and build output
+node_modules/
+dist/
+release/
+*.zip
+
+# HandBrakeCLI is downloaded by `npm run fetch-handbrake`, not committed
+vendor/
+
+# secrets and local config — never commit these
+.env
+.env.*
+*.pem
+*.key
+*.pfx
+settings.json
+accounts.json
+
+# editor / OS / tooling
+.vscode/
+.idea/
+.claude/
+*.log
+Thumbs.db
+desktop.ini
+.DS_Store
