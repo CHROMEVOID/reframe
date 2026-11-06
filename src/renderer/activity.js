@@ -42,7 +42,8 @@ function jobNumbers(job) {
 function renderActivity() {
   const page = $('#page-activity');
   page.innerHTML = '';
-  const jobs = [...S.jobs.values()].sort((a, b) => b.createdAt - a.createdAt);
+  // Hidden mode: work carries on, but nothing is shown.
+  const jobs = S.hidden ? [] : [...S.jobs.values()].sort((a, b) => b.createdAt - a.createdAt);
   const finished = jobs.filter((j) => !ACTIVE.includes(j.status));
 
   page.append(h('div', { class: 'page-head' },
@@ -353,6 +354,10 @@ async function showItemLog(job, item) {
 function onJobUpdate(job) {
   const had = S.jobs.get(job.id);
   S.jobs.set(job.id, job);
+  if (S.hidden) {
+    updateChrome();
+    return;
+  }
   for (const card of document.querySelectorAll(`.job[data-id="${job.id}"]`)) {
     if (job.kind === 'download') updateDownloadCard(card, job);
     else updateJobCard(card, job);

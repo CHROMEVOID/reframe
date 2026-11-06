@@ -68,6 +68,7 @@ const DEFAULT_SETTINGS = {
   firstRunDone: false,
   setupDone: false,
   showScanned: true,
+  hiddenMode: false,
   showAdult: false,
   capture: { adblock: true, blockRedirects: true, allowSites: [] },
   stats: { converted: 0, savedBytes: 0, folders: 0, downloads: 0, downloadBytes: 0, comics: 0 },
@@ -346,7 +347,7 @@ function registerProtocol() {
 function updateTaskbar() {
   if (!win || win.isDestroyed()) return;
   const job = converter.activeJob();
-  if (!job) {
+  if (!job || settings.hiddenMode) {
     win.setProgressBar(-1);
     return;
   }
@@ -364,7 +365,7 @@ function keepAwake() {
 }
 
 function notify(title, body, onClick) {
-  if (!settings.notify || !Notification.isSupported()) return;
+  if (!settings.notify || settings.hiddenMode || !Notification.isSupported()) return;
   const n = new Notification({ title, body, icon: iconImage() });
   if (onClick) n.on('click', onClick);
   n.show();
@@ -413,8 +414,8 @@ converter.on('finished', (job) => {
         if (win) win.show();
       },
     );
-    if (settings.openWhenDone && ok.length) shell.openPath(job.dest);
-    if (win && !win.isFocused()) win.flashFrame(true);
+    if (settings.openWhenDone && ok.length && !settings.hiddenMode) shell.openPath(job.dest);
+    if (win && !win.isFocused() && !settings.hiddenMode) win.flashFrame(true);
   }
 });
 
@@ -702,6 +703,7 @@ function registerIpc() {
     saveSettings();
     if ('appearance' in (patch || {})) capture.sendLook();
     if ('presetsPath' in (patch || {})) presets = loadPresets({ file: settings.presetsPath || null, writeCustomTo: CUSTOM_PRESETS_FILE });
+    if ('hiddenMode' in (patch || {})) updateTaskbar();
     return { ...settings, accounts: undefined };
   });
 

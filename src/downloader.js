@@ -9,6 +9,47 @@ const { EventEmitter } = require('events');
 const { Readable } = require('stream');
 const { pipeline } = require('stream/promises');
 const { isVideo } = require('./engine');
+const { sniff, fixExtension } = require('./filetype');
+
+// GIF sites: the address of the real GIF (not the site's video copy of it).
+// Giphy and Tenor pages both serve a small video by default, and Tenor even
+// sends a video for some ".gif" addresses.
+async function gifSource(url) {
+  let u;
+  try {
+    u = new URL(url);
+  } catch {
+    return null;
+  }
+  const host = u.hostname.replace(/^www\./, '');
+  // giphy.com/gifs/some-name-ID, /stickers/..., /embed/ID, media*.giphy.com/media/.../ID/giphy.mp4
+  if (/(^|\.)giphy\.com$/.test(host)) {
+    const parts = u.pathname.split('/').filter(Boolean);
+    let id = null;
+    if (/^(gifs|stickers|embed|clips)$/.test(parts[0]) && parts[1]) id = parts[1].split('-').pop();
+    else if (parts[0] === 'media' && parts.length >= 3) id = parts[parts.length - 2];
+    if (id && /^[A-Za-z0-9]+$/.test(id)) return `https://media.giphy.com/media/${id}/giphy.gif`;
+    return null;
+  }
+  // media.tenor.com/<code>/<name>.<ext>: the code's ending picks the format; AAAAC is the GIF.
+  if (/(^|\.)tenor\.com$/.test(host) && /^media\d*\.tenor\.com$/.test(u.hostname)) {
+    const m = /^\/(m\/)?([A-Za-z0-9_-]+?)AAA[A-Za-z0-9]{2}\/([^/]+?)(\.[a-z0-9]+)?$/.exec(u.pathname);
+    if (m) return `https://media.tenor.com/${m[2]}AAAAC/${m[3]}.gif`;
+    return null;
+  }
+  // tenor.com/view/...: the page names its GIF.
+  if (/(^|\.)tenor\.com$/.test(host) && /^\/(\w{2}(-\w{2})?\/)?view\//.test(u.pathname)) {
+    try {
+      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36' } });
+      const html = await res.text();
+      const m = /<meta[^>]+property="og:image"[^>]+content="([^"]+\.gif)"/i.exec(html) || /<meta[^>]+content="([^"]+\.gif)"[^>]+property="og:image"/i.exec(html);
+      return m ? m[1] : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
 
 let seq = 1;
 const uid = () => `dl${Date.now().toString(36)}${(seq++).toString(36)}`;
@@ -216,6 +257,29 @@ class Transfers extends EventEmitter {
     throw new Error('No video found at this link. Set up the downloader (button below) for 1,700+ sites, or open it in the Capture browser.');
   }
 
+  // The address of the file yt-dlp picks for a link (its own download is
+  // skipped), so it can be fetched with ordinary headers.
+  async mediaUrl(url) {
+    if (!this.tools.hasYtdlp()) return null;
+    const r = await new Promise((resolve) => {
+      const c = spawn(this.tools.ytdlpPath, ['-J', '--no-playlist', '--no-warnings', '--no-colors', url], { windowsHide: true });
+      let out = '';
+      c.stdout.on('data', (d) => { out += d; });
+      c.on('close', (code) => resolve({ code, out }));
+      c.on('error', () => resolve({ code: -1, out: '' }));
+      setTimeout(() => c.kill(), 60000);
+    });
+    if (r.code !== 0) return null;
+    try {
+      const j = JSON.parse(r.out);
+      if (j.url) return j.url;
+      const f = (j.requested_downloads || [])[0] || [...(j.formats || [])].reverse().find((x) => x.url && x.vcodec !== 'none');
+      return f ? f.url : null;
+    } catch {
+      return null;
+    }
+  }
+
   async inspectScrape(url) {
     const s = await scrapePage(url).catch(() => null);
     if (!s || !s.candidates.length) return null;
@@ -331,6 +395,8 @@ class Transfers extends EventEmitter {
       if (job.type === 'url') await this.runUrl(job);
       else if (job.type === 'images') await this.runImages(job);
       else await this.runServer(job);
+      // Every file gets the extension that matches what's really inside.
+      for (let i = 0; i < job.files.length; i++) job.files[i] = (await fixExtension(job.files[i])).file;
       if (job.status === 'running') job.status = job.items && job.items.some((i) => i.status === 'failed') ? (job.files.length ? 'partial' : 'failed') : 'done';
     } catch (e) {
       if (job.status === 'running') {
@@ -351,11 +417,40 @@ class Transfers extends EventEmitter {
   }
 
   async runUrl(job) {
-    if (job.via === 'direct') return this.runDirect(job, job.url);
+    // A Giphy or Tenor link: save the actual GIF.
+    const gif = await gifSource(job.url);
+    if (gif) {
+      try {
+        job.phase = 'Saving the GIF';
+        this.emitJob(job, true);
+        return await this.runDirect(job, gif, { anyMedia: true, name: job.title });
+      } catch (e) {
+        job.log.push(`GIF: ${e.message}`);
+      }
+    }
+    if (job.via === 'direct') return this.runDirect(job, job.url, { anyMedia: true });
     let firstError = null;
     if (job.via !== 'scrape' && this.tools.hasYtdlp()) {
       try {
-        return await this.runYtdlp(job);
+        await this.runYtdlp(job);
+        // Some sites answer yt-dlp's request with a web page instead of the
+        // video (it asks like a browser opening a page). Catch that and
+        // download the real file the ordinary way.
+        const pages = [];
+        for (const f of job.files) {
+          const head = await fsp.readFile(f).then((b) => b.slice(0, 512)).catch(() => null);
+          const t = head && sniff(head);
+          if (t && t.kind === 'page') pages.push(f);
+        }
+        if (!pages.length) return;
+        for (const f of pages) await fsp.rm(f, { force: true });
+        job.files = job.files.filter((f) => !pages.includes(f));
+        job.log.push('yt-dlp saved a web page instead of the video; fetching the file directly');
+        const media = await this.mediaUrl(job.url);
+        if (!media) throw new Error('The site sent a web page instead of the video.');
+        job.phase = 'Downloading the file directly';
+        this.emitJob(job, true);
+        return await this.runDirect(job, media, { anyMedia: true, referer: job.url, name: job.title });
       } catch (e) {
         if (job.cancelRequested) throw e;
         firstError = e;
@@ -497,20 +592,26 @@ class Transfers extends EventEmitter {
     });
   }
 
-  async runDirect(job, url) {
+  async runDirect(job, url, { anyMedia = false, referer = '', name: wanted = '' } = {}) {
     // Drive links may be any kind of file (zip, photos...), not just video.
     const drive = driveDirect(url) !== url;
     url = driveDirect(url);
     const ctrl = new AbortController();
     job.abort = ctrl;
-    const headers = { 'User-Agent': job.userAgent || 'Mozilla/5.0 Reframe' };
-    if (job.referer) headers.Referer = job.referer;
+    const headers = { 'User-Agent': job.userAgent || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36', Accept: '*/*' };
+    if (referer || job.referer) headers.Referer = referer || job.referer;
     const res = await fetch(url, { redirect: 'follow', signal: ctrl.signal, headers });
     if (!res.ok || !res.body) throw new Error(`The server answered ${res.status}.`);
     const type = res.headers.get('content-type') || '';
     const raw = nameFromResponse(res, res.url || url);
-    if (!drive && !type.startsWith('video/') && !(raw && isVideo(raw))) throw new Error('This link does not point to a video.');
-    let name = job.fixedTitle ? safeName(job.fixedTitle) + (path.extname(raw) || '') : safeName(raw || 'video');
+    const picture = type.startsWith('image/') || /\.(gif|webp|png|jpe?g|avif)$/i.test(raw || '');
+    if (!drive && !type.startsWith('video/') && !(raw && isVideo(raw)) && !(anyMedia && picture)) {
+      // A link straight to a GIF or picture is fine too.
+      if (!picture) throw new Error('This link does not point to a video.');
+    }
+    if (/^text\/html/i.test(type)) throw new Error('The site sent a web page instead of the file.');
+    let name = wanted && wanted !== job.url ? safeName(wanted) + (path.extname(raw) || '')
+      : job.fixedTitle ? safeName(job.fixedTitle) + (path.extname(raw) || '') : safeName(raw || 'video');
     if (!path.extname(name)) name += type.includes('webm') ? '.webm' : '.mp4';
     const final = await uniquePath(path.join(job.outDir, name));
     const tmp = `${final}.part`;
@@ -519,8 +620,13 @@ class Transfers extends EventEmitter {
       job.progress = total ? Math.min(0.999, done / total) : 0;
     });
     await fsp.rename(tmp, final);
-    job.files.push(final);
-    if (job.title === job.url) job.title = path.parse(final).name;
+    const checked = await fixExtension(final);
+    if (checked.kind === 'page') {
+      await fsp.rm(final, { force: true });
+      throw new Error('The site sent a web page instead of the file.');
+    }
+    job.files.push(checked.file);
+    if (job.title === job.url) job.title = path.parse(checked.file).name;
   }
 
   async stream(job, webBody, tmp, total, onDone) {
@@ -634,7 +740,8 @@ class Transfers extends EventEmitter {
           n++;
           continue;
         }
-        const ext = EXT[type] || (path.extname(new URL(item.url).pathname).toLowerCase().match(/^\.(jpe?g|png|webp|gif|avif)$/) || ['.jpg'])[0];
+        const real = sniff(buf.slice(0, 512));
+        const ext = (real && real.kind === 'image' ? `.${real.ext}` : '') || EXT[type] || (path.extname(new URL(item.url).pathname).toLowerCase().match(/^\.(jpe?g|png|webp|gif|avif)$/) || ['.jpg'])[0];
         const file = path.join(dir, `${item.rel}${ext}`);
         await fsp.writeFile(file, buf);
         item.status = 'done';
@@ -710,14 +817,18 @@ class Transfers extends EventEmitter {
       }
       this.emitJob(job);
     });
-    item.once('done', (_e, state) => {
+    item.once('done', async (_e, state) => {
       job.finishedAt = Date.now();
       job.speed = '';
       job.eta = '';
       if (state === 'completed') {
         job.status = 'done';
+        // Name the file after what's really inside (see filetype.js), before
+        // anything else hears it's finished.
+        const c = await fixExtension(final).catch(() => ({ file: final }));
+        if (c.file !== final) job.title = path.basename(c.file);
         job.progress = 1;
-        job.files = [final];
+        job.files = [c.file];
       } else {
         job.status = state === 'cancelled' ? 'cancelled' : 'failed';
         job.error = state === 'cancelled' ? '' : 'The site stopped the download.';
@@ -794,4 +905,4 @@ function friendlyYtdlpError(text) {
   return err ? err.replace(/^ERROR:\s*(\[[^\]]+\]\s*)?/, '') : 'The download failed.';
 }
 
-module.exports = { Transfers, QUALITY, safeName, driveDirect, scrapePage };
+module.exports = { Transfers, QUALITY, safeName, driveDirect, scrapePage, gifSource };

@@ -39,6 +39,7 @@ Then it kind of grew. It downloads videos now. It has a media library. It has it
 - The **Capture browser** is a mini browser inside the app. Go to a page, press play, and Reframe lists every video it spots, with previews so you know which is which. Ads get kicked out of that list. Its buttons match the colour you pick in Settings.
 - It has an ad blocker built in, and it asks before a site tries to bounce you somewhere else with a sneaky redirect.
 - Right-click any picture or video on a page to save it there and then.
+- **GIFs come out as real GIFs.** Paste a Giphy or Tenor link and you get the actual `.gif`, not the site's video copy of it. And every download gets checked, so a file is always named after what's really inside it (no more ".gif" files that are secretly videos and won't open).
 
 ### 📚 Comics and galleries
 - Open a chapter or gallery page, hit **Pictures**, and tell Reframe how the reader works:
@@ -60,6 +61,9 @@ Pull videos in from OneDrive, Google Drive and Dropbox folders, or sign in to **
 
 ### 🎨 Make it yours
 Themes, accent colours, corner roundness, how much stuff moves, zoom. A quick setup walks you through the basics the first time you open it, and <kbd>Ctrl</kbd> + <kbd>K</kbd> pulls up a command palette so you can jump anywhere.
+
+### 🙈 Hidden mode
+Someone walks up behind you? Just type **`parent`**, **`show`**, **`parentmode`** or **`showoffmode`** anywhere in the app (not in a text box) and every video vanishes: the library, downloads, conversions, the lot. Nothing gets deleted and anything converting keeps going in the background. Type **`theregone`** and it all comes straight back. It even stays hidden after a restart until you do.
 
 ---
 

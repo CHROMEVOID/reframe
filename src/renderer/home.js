@@ -25,7 +25,7 @@ function renderHome() {
   page.innerHTML = '';
   const st = S.settings.stats || {};
   const lib = visibleLibrary();
-  const jobs = [...S.jobs.values()];
+  const jobs = S.hidden ? [] : [...S.jobs.values()];
   const active = jobs.filter((j) => ACTIVE.includes(j.status));
 
   page.append(h('div', { class: 'home-hero' },

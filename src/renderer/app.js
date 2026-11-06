@@ -8,6 +8,7 @@ const S = {
   presets: null,
   tools: null,
   toolProgress: {},
+  hidden: false,
   scan: null,
   jobs: new Map(),
   library: { categories: [], videos: [] },
@@ -67,7 +68,7 @@ function movePill() {
 }
 
 function updateChrome() {
-  const jobs = [...S.jobs.values()];
+  const jobs = S.hidden ? [] : [...S.jobs.values()];
   const active = jobs.filter((j) => ACTIVE.includes(j.status));
   const badge = $('#activityBadge');
   badge.hidden = !active.length;
@@ -240,6 +241,8 @@ async function boot() {
   S.tools = tools;
   S.jobs = new Map(jobs.map((j) => [j.id, j]));
   S.library = library;
+  S.hidden = !!settings.hiddenMode;
+  document.documentElement.classList.toggle('is-hidden', S.hidden);
   S.lib.view = settings.libraryView || 'grid';
   S.lib.sort = settings.librarySort || 'added';
   applyAppearance(settings.appearance);
@@ -270,7 +273,7 @@ async function boot() {
     if (!e.target.closest('input, textarea')) e.preventDefault();
   });
   setInterval(() => {
-    if (S.page === 'activity') {
+    if (S.page === 'activity' && !S.hidden) {
       for (const job of S.jobs.values()) {
         if (job.status === 'running' && job.kind !== 'download') updateJobCard(document.querySelector(`.job[data-id="${job.id}"]`), job);
       }

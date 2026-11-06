@@ -258,7 +258,7 @@ function renderBrowse(page) {
     return;
   }
   const q = B.search.toLowerCase();
-  const items = B.items.filter((i) => !q || i.title.toLowerCase().includes(q));
+  const items = S.hidden ? [] : B.items.filter((i) => !q || i.title.toLowerCase().includes(q));
   const chosen = B.items.filter((i) => B.selected.has(i.id));
   const size = chosen.reduce((n, i) => n + (i.size || 0), 0);
   const search = h('input', { class: 'input', placeholder: `Search ${B.lib.name}`, value: B.search, spellcheck: 'false' });
@@ -292,7 +292,7 @@ function renderBrowse(page) {
       },
     })));
   if (!items.length) {
-    page.append(emptyState({ iconName: 'film', title: 'Nothing found', text: 'No videos match.' }));
+    page.append(emptyState({ iconName: 'film', title: S.hidden ? 'Nothing here' : 'Nothing found', text: S.hidden ? '' : 'No videos match.' }));
     return;
   }
   const grid = h('div', { class: 'browse-grid' });

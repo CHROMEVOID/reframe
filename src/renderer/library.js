@@ -8,9 +8,10 @@ const PLAYABLE = /\.(mp4|m4v|webm|mkv|mov|ogv)$/i;
 const RECENT_MS = 7 * 24 * 3600 * 1000;
 const SPECIAL = ['all', 'fav', 'recent', 'uncat'];
 
-// What the library shows right now: no PC-scan
+// What the library shows right now: nothing in hidden mode, and no PC-scan
 // results while those are switched off (they're kept, just not shown).
 function visibleLibrary() {
+  if (S.hidden) return { categories: [], videos: [] };
   const { categories, videos } = S.library;
   if (S.settings.showScanned !== false) return S.library;
   const hiddenCats = new Set(categories.filter((c) => c.origin === 'scan').map((c) => c.id));
@@ -146,7 +147,7 @@ function renderLibrary() {
   side.append(scroll);
   side.append(h('div', { class: 'lib-side-foot' },
     btn('New category', { kind: 'ghost', icon: 'plus', onClick: () => newCategory(null) }),
-    btn('Scan my PC', { kind: 'ghost', icon: 'scan', onClick: () => askScan(false) })));
+    S.hidden ? null : btn('Scan my PC', { kind: 'ghost', icon: 'scan', onClick: () => askScan(false) })));
 
   // ---------- main ----------
   const main = h('div', { class: 'lib-main' });
@@ -269,8 +270,8 @@ function renderLibrary() {
     main.append(emptyState({
       iconName: 'library',
       title: 'Your library is empty',
-      text: 'Videos you convert or download are added here automatically and sorted into categories that match their folders. Reframe can also find the videos already on your PC.',
-      actions: [
+      text: S.hidden ? '' : 'Videos you convert or download are added here automatically and sorted into categories that match their folders. Reframe can also find the videos already on your PC.',
+      actions: S.hidden ? [] : [
         btn('Find videos on my PC', { kind: 'primary', icon: 'scan', onClick: () => askScan(false) }),
         btn('Add a folder', { kind: 'ghost', icon: 'import', onClick: importFolderFlow }),
       ],
@@ -802,6 +803,7 @@ function playVideo(v) {
 }
 
 function playPath(p, title) {
+  if (S.hidden) return;
   stopPreview();
   const video = h('video', { class: 'player-video', controls: true, autoplay: true, src: mediaUrl(p) });
   const fallback = h('div', { class: 'player-fallback', hidden: true },
@@ -983,14 +985,14 @@ function onScanProgress(p) {
       h('div', { class: 'spinner small' }),
       h('div', { class: 'sp-text' },
         h('div', { class: 'sp-title' }, 'Scanning your PC'),
-        h('div', { class: 'sp-sub' }, `${(p.folders || 0).toLocaleString()} folders · ${`${(p.found || 0).toLocaleString()} videos found`}`)),
+        h('div', { class: 'sp-sub' }, `${(p.folders || 0).toLocaleString()} folders · ${S.hidden ? '' : `${(p.found || 0).toLocaleString()} videos found`}`)),
       btn('Stop', { kind: 'ghost sm', onClick: () => api.pcscan.stop() }),
     ]);
     return;
   }
   pill.hidden = true;
   if (p.error) toast(`The scan stopped: ${p.error}`, { kind: 'error' });
-  else if (p.done) {
+  else if (p.done && !S.hidden) {
     toast(p.found ? `Found ${plural(p.found, 'video')} on your PC${p.added < p.found ? ` (${p.added} new)` : ''}.` : 'No videos were found on your PC.', {
       kind: p.found ? 'ok' : 'info',
       timeout: 8000,

@@ -263,10 +263,11 @@ function renderConvert() {
     return;
   }
 
+  if (S.hidden) C.showFiles = false;
   const left = h('div', { class: 'card tree-card' },
     h('div', { class: 'card-head' },
       h('div', null, h('h2', null, 'What you’ll get'), h('p', { class: 'card-sub' }, 'A new folder that looks exactly like the original, with converted videos.')),
-      h('div', { class: 'seg' },
+      S.hidden ? null : h('div', { class: 'seg' },
         h('button', { class: C.showFiles ? '' : 'on', onclick: () => { C.showFiles = false; renderConvert(); } }, 'Folders'),
         h('button', { class: C.showFiles ? 'on' : '', onclick: () => { C.showFiles = true; renderConvert(); } }, 'Folders & files'))),
     h('div', { class: 'tree-actions' },
@@ -355,7 +356,7 @@ function renderConvert() {
             autoCategorize: S.settings.autoCategorize,
           },
         });
-        toast(`Started converting “${baseName(C.source)}”`, { kind: 'ok' });
+        toast(S.hidden ? 'Started.' : `Started converting “${baseName(C.source)}”`, { kind: 'ok' });
         C.source = null;
         C.scan = null;
         go('activity');

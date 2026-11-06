@@ -245,8 +245,13 @@ class Capture {
       ses.on('will-download', (_e, item) => {
         if (!this.onFile) return;
         if (this.saveAsPath) {
-          item.setSavePath(this.saveAsPath);
+          const chosen = this.saveAsPath;
+          item.setSavePath(chosen);
           this.saveAsPath = null;
+          // A ".gif" that's really a video (Tenor does this) gets the right name.
+          item.once('done', (_e2, state) => {
+            if (state === 'completed') require('./filetype').fixExtension(chosen).catch(() => {});
+          });
           return;
         }
         let site = 'Web';
@@ -595,7 +600,7 @@ class Capture {
     pictures.slice(0, 4).forEach((m, i) => {
       const what = m.how === 'full-size link' ? 'Full-size picture' : m.how === 'video cover' ? 'Video cover' : m.how === 'background' ? 'Background picture' : 'Picture';
       const actions = [
-        { label: 'Save', click: () => { wc.downloadURL(m.url, { headers: refHeaders(m.url, ref) }); say(fileNameOf(m.url, 'picture')); } },
+        { label: 'Save', click: () => this.savePicture(wc, m.url, ref).then(say).catch(() => {}) },
         { label: 'Save as…', click: () => this.saveAs(m.url, fileNameOf(m.url, 'picture.jpg')) },
         { label: 'Copy picture', click: () => wc.copyImageAt(p.x, p.y) },
         { label: 'Copy address', click: () => clipboard.writeText(m.url) },
@@ -666,7 +671,23 @@ class Capture {
     say(`Saving “${best.title || 'video'}” — follow it in Reframe’s Activity.`);
   }
 
+  // Right-click Save on a picture. A Giphy or Tenor GIF saves as the real
+  // GIF (those sites often show a video copy of it). Returns the file name.
+  async savePicture(wc, url, ref) {
+    const { gifSource } = require('./downloader');
+    const real = await gifSource(url).catch(() => null);
+    const target = real || url;
+    wc.downloadURL(target, { headers: refHeaders(target, ref) });
+    return fileNameOf(target, 'picture');
+  }
+
   async saveAs(url, name) {
+    const { gifSource } = require('./downloader');
+    const real = await gifSource(url).catch(() => null);
+    if (real) {
+      url = real;
+      name = String(name || 'picture').replace(/.[a-z0-9]{2,5}$/i, '') + '.gif';
+    }
     const r = await dialog.showSaveDialog(this.win, { defaultPath: name });
     if (r.canceled || !r.filePath) return;
     this.saveAsPath = r.filePath;

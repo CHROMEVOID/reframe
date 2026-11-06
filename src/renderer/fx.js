@@ -1,6 +1,6 @@
 'use strict';
-// Motion effects: cursor spotlight, 3D tilt, ripples, confetti, count-ups
-// and scroll reveals.
+// Motion effects: cursor spotlight, 3D tilt, ripples, confetti, count-ups,
+// and the secret hidden-mode words.
 
 const motionOn = () => document.documentElement.dataset.motion !== 'off';
 const motionFull = () => document.documentElement.dataset.motion === 'full';
@@ -121,6 +121,42 @@ function confetti() {
     }
   };
   requestAnimationFrame(frame);
+}
+
+// ---------- hidden mode ----------
+// Typing one of these words anywhere (outside a text box) hides every video
+// in the app; typing the unlock word brings everything back. Nothing is
+// deleted and conversions keep running in the background.
+const HIDE_WORDS = ['parentmode', 'showoffmode', 'parent', 'show'];
+const SHOW_WORD = 'theregone';
+let typed = '';
+
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey || e.altKey || e.metaKey || e.key.length !== 1) return;
+  if (e.target.closest && e.target.closest('input, textarea, select, [contenteditable]')) return;
+  typed = (typed + e.key.toLowerCase()).slice(-16);
+  if (!S.hidden && HIDE_WORDS.some((w) => typed.endsWith(w))) {
+    typed = '';
+    setHidden(true);
+  } else if (S.hidden && typed.endsWith(SHOW_WORD)) {
+    typed = '';
+    setHidden(false);
+  }
+}, true);
+
+function setHidden(on) {
+  S.hidden = on;
+  api.setSettings({ hiddenMode: on });
+  // Close anything that might be showing a video.
+  $$('#layer .veil').forEach((v) => v.remove());
+  closeMenus();
+  document.documentElement.classList.toggle('is-hidden', on);
+  updateChrome();
+  RENDER[S.page]();
+  if (!on) {
+    queueThumbs();
+    toast('Everything’s back where it was.', { kind: 'ok', timeout: 2500 });
+  }
 }
 
 // Cards slide in as they scroll into view, and a light follows the cursor over them.

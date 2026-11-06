@@ -64,7 +64,7 @@ async function startDownload() {
   const D = S.dl;
   try {
     await api.dl.start({ url: D.url, info: D.info, quality: D.quality, playlist: D.playlist, cookiesBrowser: D.cookies });
-    toast(`Downloading “${D.info ? D.info.title : D.url}”`, { kind: 'ok' });
+    toast(S.hidden ? 'Download started.' : `Downloading “${D.info ? D.info.title : D.url}”`, { kind: 'ok' });
     D.url = '';
     D.info = null;
     renderDownload();
@@ -183,8 +183,8 @@ function renderDownload() {
   page.append(sitesPanel());
   page.append(otherSitesPanel());
 
-  // Recent downloads
-  const jobs = [...S.jobs.values()].filter((j) => j.kind === 'download').sort((a, b) => b.createdAt - a.createdAt).slice(0, 6);
+  // Recent downloads (hidden in hidden mode)
+  const jobs = S.hidden ? [] : [...S.jobs.values()].filter((j) => j.kind === 'download').sort((a, b) => b.createdAt - a.createdAt).slice(0, 6);
   if (jobs.length) {
     page.append(h('div', { class: 'section-label' }, 'Recent downloads'));
     const list = h('div', { class: 'jobs compact' });

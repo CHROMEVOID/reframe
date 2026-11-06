@@ -469,7 +469,8 @@ async function grabLoaded(wc, urls) {
       try {
         const r = await wc.debugger.sendCommand('Page.getResourceContent', { frameId: at.frameId, url: u });
         const data = Buffer.from(r.content || '', r.base64Encoded ? 'base64' : 'utf8');
-        if (data.length) out.set(u, { data, type: at.type || '' });
+        // Still downloading? Then it's left out and downloaded in full later.
+        if (data.length && require('./filetype').looksComplete(data)) out.set(u, { data, type: at.type || '' });
       } catch { /* no longer in memory: it will be downloaded instead */ }
     }
   } catch { /* the engine's channel is busy (e.g. DevTools open) */ }
