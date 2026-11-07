@@ -53,7 +53,7 @@ function openSetup() {
           title: a.name,
           style: { background: `linear-gradient(135deg, ${a.g[0]}, ${a.g[1]}, ${a.g[2]})` },
           onclick: () => { setAppearance({ accent: id }, { rerender: false }); draw(); },
-        }, ap.accent === id ? ic('check', 14) : null)))), nav());
+        }, ap.accent === id ? ic('check', 14) : null))), setupEyes(draw)), nav());
     } else if (which === 'folder') {
       const ds = S.settings.downloads;
       box.append(page('folder', 'Where should downloads go?', 'Videos, music and comics you download are saved here, sorted by site.',

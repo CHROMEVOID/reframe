@@ -18,7 +18,7 @@ function paletteCommands(q) {
     ['import', 'Add a folder of videos to the library…', () => importFolderFlow()],
     ['folder', 'Open my downloads folder', () => api.open(S.settings.downloads.dir)],
     ['bolt', `Turn Turbo ${S.settings.turbo ? 'off' : 'on'}`, async () => { S.settings = await api.setSettings({ turbo: !S.settings.turbo }); updateChrome(); toast(`Turbo is ${S.settings.turbo ? 'on' : 'off'}.`, { kind: 'ok', timeout: 2000 }); }],
-    ['brush', `Switch to ${S.settings.appearance.theme === 'light' ? 'dark' : 'light'} theme`, () => setAppearance({ theme: S.settings.appearance.theme === 'light' ? 'graphite' : 'light' }, { rerender: false })],
+    ['brush', `Switch to ${THEMES[S.settings.appearance.theme]?.light ? 'dark' : 'light'} theme`, () => setAppearance({ theme: THEMES[S.settings.appearance.theme]?.light ? 'graphite' : 'light' }, { rerender: false })],
     ['star', 'Show my favourite videos', () => { go('library'); selectCat('fav'); }],
   ];
   const words = q.toLowerCase().split(/\s+/).filter(Boolean);

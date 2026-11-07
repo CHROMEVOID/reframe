@@ -399,7 +399,7 @@ function applyLook(a) {
     g = p.g;
     accent = p.a;
   }
-  const light = theme === 'light';
+  const light = !!THEMES[theme].light;
   if (light && luminance(accent) > 0.6) {
     accent = shade(accent, -0.55);
     g = g.map((c) => shade(c, -0.5));

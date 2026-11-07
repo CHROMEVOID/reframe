@@ -1,0 +1,134 @@
+/* Eyes & reading: options that make the app suit everyone's eyes.
+   Each one is a data-* switch on <html>, set by applyEyes() in appearance.js.
+   Loaded last, so it wins over the other style sheets. */
+
+/* ---------- Paper: a warm light theme that's easy on the eyes ---------- */
+[data-theme="paper"] {
+  --fg-rgb: 48, 36, 18;
+  --bg: #e9e1cf; --bg-2: #f3ecdc; --panel: #fbf6ea; --panel-2: #f3ecdc; --panel-3: #e8dfca;
+  --pop: #fbf6ea; --modal: #fbf6ea; --toast: #fbf6ea;
+  --text: #2b2418; --text-2: #5b5040; --text-3: #8c8068;
+  --shade: 90, 66, 30;
+}
+
+/* ---------- contrast ---------- */
+[data-contrast="high"] {
+  --text: #ffffff; --text-2: #e6e9f0; --text-3: #bfc5d2;
+  --line: rgba(var(--fg-rgb), 0.24); --line-2: rgba(var(--fg-rgb), 0.4);
+}
+[data-tone="light"][data-contrast="high"] { --text: #000000; --text-2: #1c2030; --text-3: #3d4357; }
+[data-theme="paper"][data-contrast="high"] { --text: #120d04; --text-2: #2f2617; --text-3: #4f4430; }
+[data-contrast="high"] .card, [data-contrast="high"] .stat, [data-contrast="high"] .btn.ghost { border-color: var(--line-2); }
+
+[data-contrast="soft"] { --text: #cdd1d9; --text-2: #9ba1ae; --text-3: #737988; }
+[data-tone="light"][data-contrast="soft"] { --text: #353a47; --text-2: #5c6272; --text-3: #8a90a0; }
+[data-theme="paper"][data-contrast="soft"] { --text: #3e3524; --text-2: #65594a; --text-3: #8f846d; }
+
+/* ---------- fonts ---------- */
+[data-font="clear"] { --font: "Segoe UI", Arial, sans-serif; --font-display: "Segoe UI", Arial, sans-serif; }
+[data-font="wide"] { --font: Verdana, Tahoma, sans-serif; --font-display: Verdana, Tahoma, sans-serif; }
+[data-font="friendly"] { --font: "Comic Sans MS", "Segoe Print", sans-serif; --font-display: "Comic Sans MS", "Segoe Print", sans-serif; }
+/* Wide letters take more room: tighten headings a little so they still fit. */
+[data-font="wide"] h1, [data-font="friendly"] h1 { letter-spacing: -0.02em; }
+
+/* The font picker shows each font in itself. */
+.eye-fonts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.eye-font {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 6px;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  color: var(--text-2); cursor: pointer; font: inherit; font-size: 12.5px; min-width: 0;
+}
+.eye-font:hover { border-color: var(--line-2); color: var(--text); }
+.eye-font.on { border-color: var(--accent); color: var(--text); box-shadow: 0 0 0 1px var(--accent) inset; }
+.eye-font-aa { font-size: 22px; line-height: 1.1; color: var(--text); }
+.eye-font[data-sample="default"] .eye-font-aa { font-family: "Segoe UI Variable Display", "Segoe UI", sans-serif; }
+.eye-font[data-sample="clear"] .eye-font-aa { font-family: "Segoe UI", Arial, sans-serif; }
+.eye-font[data-sample="wide"] .eye-font-aa { font-family: Verdana, Tahoma, sans-serif; }
+.eye-font[data-sample="friendly"] .eye-font-aa { font-family: "Comic Sans MS", "Segoe Print", sans-serif; }
+
+/* ---------- text spacing and weight ---------- */
+[data-spacing="on"] body { letter-spacing: 0.03em; word-spacing: 0.12em; line-height: 1.7; }
+[data-spacing="on"] p, [data-spacing="on"] li, [data-spacing="on"] .set-hint, [data-spacing="on"] .card-sub,
+[data-spacing="on"] .head-sub, [data-spacing="on"] .help-card li { line-height: 1.75; }
+[data-weight="bold"] body { font-weight: 600; }
+[data-weight="bold"] .set-hint, [data-weight="bold"] .card-sub, [data-weight="bold"] .head-sub { font-weight: 500; }
+
+/* ---------- colour vision: status colours that stay apart ---------- */
+/* Red–green safe: blue for good, orange for bad, yellow for warnings. */
+[data-vision="redgreen"] {
+  --ok: #4aa3ff; --ok-soft: rgba(74, 163, 255, 0.14);
+  --err: #ff8a1f; --err-soft: rgba(255, 138, 31, 0.14);
+  --warn: #ffe066; --warn-soft: rgba(255, 224, 102, 0.14);
+}
+[data-tone="light"][data-vision="redgreen"] { --ok: #1f63d6; --err: #c25400; --warn: #8a6d00; }
+[data-tone="light"][data-vision="redgreen"] .job-stats .good, [data-tone="light"][data-vision="redgreen"] .pill.s-done { color: #1f63d6; }
+[data-tone="light"][data-vision="redgreen"] .notice.error, [data-tone="light"][data-vision="redgreen"] .btn.danger-text,
+[data-tone="light"][data-vision="redgreen"] .menu-item.danger, [data-tone="light"][data-vision="redgreen"] .menu-item.danger .ic { color: #c25400; }
+[data-tone="light"][data-vision="redgreen"] .tree-arrow { color: #1f63d6; }
+/* Blue–yellow safe: teal for good, red-pink for bad, orange for warnings. */
+[data-vision="blueyellow"] {
+  --ok: #19c6b8; --ok-soft: rgba(25, 198, 184, 0.14);
+  --err: #ff4d7a; --err-soft: rgba(255, 77, 122, 0.14);
+  --warn: #ff9a52; --warn-soft: rgba(255, 154, 82, 0.14);
+}
+[data-tone="light"][data-vision="blueyellow"] { --ok: #00877c; --err: #c8174a; --warn: #b85a00; }
+[data-tone="light"][data-vision="blueyellow"] .job-stats .good, [data-tone="light"][data-vision="blueyellow"] .pill.s-done { color: #00877c; }
+[data-tone="light"][data-vision="blueyellow"] .notice.warn { color: #b85a00; }
+[data-tone="light"][data-vision="blueyellow"] .tree-arrow { color: #00877c; }
+[data-vision="redgreen"] .status-dot.ok, [data-vision="blueyellow"] .status-dot.ok { box-shadow: 0 0 10px color-mix(in srgb, var(--ok) 50%, transparent); }
+[data-vision="redgreen"] .status-dot.bad, [data-vision="blueyellow"] .status-dot.bad { box-shadow: 0 0 10px color-mix(in srgb, var(--err) 50%, transparent); }
+
+/* ---------- warm screen ---------- */
+html::after {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 2147483647;
+  background: rgb(255, 150, 40); mix-blend-mode: multiply; opacity: 0; transition: opacity .4s ease;
+}
+[data-warm="low"]::after { opacity: 0.1; }
+[data-warm="high"]::after { opacity: 0.22; }
+
+/* ---------- strong keyboard outline ---------- */
+[data-focus="strong"] :focus-visible {
+  outline: 3px solid var(--accent) !important;
+  outline-offset: 3px !important;
+  box-shadow: 0 0 0 7px color-mix(in srgb, var(--accent) 28%, transparent) !important;
+}
+[data-focus="strong"] .switch-input:focus-visible + .switch { outline: 3px solid var(--accent) !important; outline-offset: 3px; }
+
+/* ---------- underlined links ---------- */
+[data-links="underline"] a, [data-links="underline"] .link { text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1.5px; }
+
+/* ---------- solid panels ---------- */
+[data-solid="on"] *, [data-solid="on"] *::before { backdrop-filter: none !important; }
+[data-solid="on"] .aurora { display: none !important; }
+[data-solid="on"] .veil, [data-solid="on"] .drop-veil { background: rgba(0, 0, 0, .72) !important; }
+[data-solid="on"] .main { background-image: none !important; }
+
+/* ---------- the Eyes & reading card ---------- */
+.eye-presets { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-top: 10px; }
+.eye-preset {
+  position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; text-align: left;
+  padding: 10px 12px; background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  color: var(--text-2); font: inherit; font-size: 12px; cursor: pointer; min-width: 0;
+}
+.eye-preset b { color: var(--text); font-size: 13px; font-weight: 600; }
+.eye-preset:hover { border-color: var(--line-2); }
+.eye-preset.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.eye-check { position: absolute; top: 9px; right: 9px; color: var(--accent); }
+.eye-size-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.eye-pct { font-family: var(--font-display); font-weight: 650; color: var(--accent); font-variant-numeric: tabular-nums; }
+.eye-size { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+.eye-a { color: var(--text-2); font-family: var(--font-display); font-weight: 600; line-height: 1; }
+.eye-a.small { font-size: 12px; }
+.eye-a.big { font-size: 22px; }
+.eye-range { flex: 1; min-width: 0; accent-color: var(--accent); height: 22px; cursor: pointer; }
+
+/* Size choice in first-run setup */
+.setup-eyes { margin-top: 16px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.setup-eyes-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: center; }
+.setup-eyes .fine { margin: 0; text-align: center; max-width: 520px; }
+.setup-eyes .fine .ic { vertical-align: -2px; }
+
+/* Big sizes in a small window: the side bar scrolls instead of squashing. */
+.sidebar { overflow-y: auto; overflow-x: hidden; scrollbar-width: none; }
+.sidebar::-webkit-scrollbar { display: none; }
+.sidebar > * { flex-shrink: 0; }

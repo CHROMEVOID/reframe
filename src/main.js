@@ -234,7 +234,7 @@ function createWindow() {
     if (capture.win && !capture.win.isDestroyed()) capture.win.close();
   });
   win.once('ready-to-show', () => {
-    win.webContents.setZoomFactor(Number(settings.appearance.zoom) || 1);
+    win.webContents.setZoomFactor(Math.max(0.8, Math.min(1.75, Number(settings.appearance.zoom) || 1)));
     win.show();
   });
   win.loadURL('reframe://app/index.html');
@@ -639,7 +639,7 @@ function registerIpc() {
   }));
 
   h('ui:zoom', (z) => {
-    if (win) win.webContents.setZoomFactor(Math.max(0.8, Math.min(1.3, Number(z) || 1)));
+    if (win) win.webContents.setZoomFactor(Math.max(0.8, Math.min(1.75, Number(z) || 1)));
   });
   h('ui:titlebar', ({ color, symbol }) => {
     try {

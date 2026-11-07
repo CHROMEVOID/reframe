@@ -58,9 +58,6 @@ function renderSettings() {
     h('div', { class: 'set-row' },
       h('div', { class: 'set-text' }, h('div', { class: 'set-label' }, 'Spacing')),
       seg([['comfortable', 'Comfy'], ['compact', 'Compact']], ap.density, (v) => setAppearance({ density: v }))),
-    h('div', { class: 'set-row' },
-      h('div', { class: 'set-text' }, h('div', { class: 'set-label' }, 'Interface size')),
-      seg([[0.9, '90%'], [1, '100%'], [1.1, '110%'], [1.2, '120%']], ap.zoom, (v) => setAppearance({ zoom: v }))),
     h('div', { class: 'options' },
       toggle({ iconName: 'sparkles', label: 'Animated background glow', checked: ap.aurora !== false, onChange: (v) => setAppearance({ aurora: v }) }),
       toggle({ iconName: 'play', label: 'Intro animation when Reframe opens', checked: ap.splash !== false, onChange: (v) => setAppearance({ splash: v }) })),
@@ -253,7 +250,7 @@ function renderSettings() {
       btn('handbrake.fr', { kind: 'ghost sm', icon: 'external', onClick: () => api.external('https://handbrake.fr/') }),
       btn('yt-dlp', { kind: 'ghost sm', icon: 'external', onClick: () => api.external('https://github.com/yt-dlp/yt-dlp') })));
 
-  const grid = h('div', { class: 'settings-grid' }, appearance, conversion, lib, dlTools, engine, about);
+  const grid = h('div', { class: 'settings-grid' }, appearance, eyesCard('Reframe'), conversion, lib, dlTools, engine, about);
   page.append(grid);
   page.scrollTop = keep;
 }

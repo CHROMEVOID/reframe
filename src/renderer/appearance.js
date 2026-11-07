@@ -15,7 +15,8 @@ const THEMES = {
   graphite: { name: 'Graphite', bg: '#0b0c10', panel: '#14161c', text: '#a3a9b8' },
   midnight: { name: 'Midnight', bg: '#000000', panel: '#0d0d11', text: '#a3a9b8' },
   ocean: { name: 'Deep blue', bg: '#060a14', panel: '#0f182c', text: '#a3b1cc' },
-  light: { name: 'Light', bg: '#e4e7ee', panel: '#ffffff', text: '#4a5164' },
+  light: { name: 'Light', bg: '#e4e7ee', panel: '#ffffff', text: '#4a5164', light: true },
+  paper: { name: 'Paper', bg: '#e9e1cf', panel: '#fbf6ea', text: '#5b5040', light: true },
 };
 
 function shade(hex, amt) {
@@ -40,6 +41,8 @@ function applyAppearance(a) {
   const root = document.documentElement;
   const theme = THEMES[a.theme] ? a.theme : 'graphite';
   root.dataset.theme = theme;
+  root.dataset.tone = THEMES[theme].light ? 'light' : 'dark';
+  applyEyes(a);
   root.dataset.motion = a.motion || 'full';
   root.dataset.density = a.density || 'comfortable';
   root.dataset.aurora = a.aurora === false ? 'off' : 'on';
@@ -55,7 +58,7 @@ function applyAppearance(a) {
     accent = p.a;
   }
   // Mono on a light background needs to be dark to be seen.
-  if (theme === 'light' && luminance(accent) > 0.6) {
+  if (THEMES[theme].light && luminance(accent) > 0.6) {
     accent = shade(accent, -0.55);
     g = g.map((c) => shade(c, -0.5));
   }
@@ -80,4 +83,134 @@ async function setAppearance(patch, { rerender = true } = {}) {
   if ('zoom' in patch) api.zoom(patch.zoom);
   api.setSettings({ appearance: patch });
   if (rerender && S.page === 'settings') renderSettings();
+}
+
+// ---------- Eyes & reading ----------
+// Options so the app suits everyone's eyes: size, contrast, easy-read fonts,
+// text spacing, colour-blind friendly status colours, a warm screen, and
+// strong keyboard outlines. Each one is a data-* switch on <html> that
+// eyes.css reads, so nothing else needs to know about them.
+
+const EYE_DEFAULTS = {
+  zoom: 1, contrast: 'normal', font: 'default', textSpacing: false, boldText: false,
+  vision: 'standard', warm: 'off', strongFocus: false, underlineLinks: false, solid: false,
+};
+
+const EYE_FONTS = [
+  ['default', 'Standard'],
+  ['clear', 'Clear'],
+  ['wide', 'Wide'],
+  ['friendly', 'Friendly'],
+];
+
+// One-click starting points. Each sets every eye option, so they don't mix.
+const EYE_PRESETS = [
+  ['standard', 'Standard', 'The normal look.', {}],
+  ['easy', 'Easy reading', 'Wider letters, more space between lines.', { font: 'wide', textSpacing: true, zoom: 1.1 }],
+  ['big', 'Big & bold', 'Everything larger, thicker text.', { zoom: 1.35, boldText: true, contrast: 'high', strongFocus: true }],
+  ['contrast', 'High contrast', 'Brightest text, solid panels, clear outlines.', { contrast: 'high', solid: true, strongFocus: true, underlineLinks: true }],
+  ['gentle', 'Gentle', 'Softer text and a warm screen, for long sessions or the evening.', { contrast: 'soft', warm: 'low' }],
+];
+
+function applyEyes(a) {
+  const root = document.documentElement;
+  const v = (k) => (a[k] === undefined ? EYE_DEFAULTS[k] : a[k]);
+  root.dataset.contrast = v('contrast');
+  root.dataset.font = v('font');
+  root.dataset.spacing = v('textSpacing') ? 'on' : 'off';
+  root.dataset.weight = v('boldText') ? 'bold' : 'normal';
+  root.dataset.vision = v('vision');
+  root.dataset.warm = v('warm');
+  root.dataset.focus = v('strongFocus') ? 'strong' : 'normal';
+  root.dataset.links = v('underlineLinks') ? 'underline' : 'plain';
+  root.dataset.solid = v('solid') ? 'on' : 'off';
+}
+
+// Which preset (if any) matches the current options exactly.
+function currentEyePreset(a) {
+  const keys = Object.keys(EYE_DEFAULTS);
+  for (const [id, , , patch] of EYE_PRESETS) {
+    const want = { ...EYE_DEFAULTS, ...patch };
+    if (keys.every((k) => (a[k] === undefined ? EYE_DEFAULTS[k] : a[k]) === want[k])) return id;
+  }
+  return null;
+}
+
+// The "Eyes & reading" card on the Settings page.
+function eyesCard(appName) {
+  const ap = S.settings.appearance;
+  const val = (k) => (ap[k] === undefined ? EYE_DEFAULTS[k] : ap[k]);
+  const now = currentEyePreset(ap);
+  const row = (label, hint, control) => h('div', { class: 'set-row' },
+    h('div', { class: 'set-text' }, h('div', { class: 'set-label' }, label), hint ? h('div', { class: 'set-hint' }, hint) : null), control);
+
+  const presets = h('div', { class: 'eye-presets' }, EYE_PRESETS.map(([id, name, text, patch]) => h('button', {
+    class: `eye-preset ${now === id ? 'on' : ''}`,
+    onclick: () => setAppearance({ ...EYE_DEFAULTS, ...patch }),
+  }, h('b', null, name), h('span', null, text), now === id ? ic('check', 14, 'eye-check') : null)));
+
+  // Size: a slider, applied live while dragging, saved when let go.
+  const pct = h('span', { class: 'eye-pct' }, `${Math.round(val('zoom') * 100)}%`);
+  const size = h('input', { type: 'range', class: 'eye-range', min: '0.8', max: '1.75', step: '0.05', value: String(val('zoom')), 'aria-label': 'Text and interface size' });
+  size.addEventListener('input', () => { pct.textContent = `${Math.round(Number(size.value) * 100)}%`; });
+  size.addEventListener('change', () => setAppearance({ zoom: Number(size.value) }));
+  const sizeRow = h('div', { class: 'set-block' },
+    h('div', { class: 'eye-size-head' }, h('div', { class: 'set-label' }, 'Text & interface size'), pct),
+    h('div', { class: 'set-hint' }, 'Makes everything bigger or smaller: text, buttons and icons. You can also hold Ctrl and press + or −.'),
+    h('div', { class: 'eye-size' }, h('span', { class: 'eye-a small' }, 'A'), size, h('span', { class: 'eye-a big' }, 'A')));
+
+  const fontPick = h('div', { class: 'eye-fonts' }, EYE_FONTS.map(([id, name]) => h('button', {
+    class: `eye-font ${val('font') === id ? 'on' : ''}`,
+    'data-sample': id,
+    onclick: () => setAppearance({ font: id }),
+  }, h('span', { class: 'eye-font-aa' }, 'Aa'), h('span', null, name))));
+
+  return h('div', { class: 'card eyes-card' },
+    h('div', { class: 'card-head' }, h('div', null, h('h2', null, 'Eyes & reading'), h('p', { class: 'card-sub' }, `Make ${appName} easy to read for your eyes.`)), ic('eye', 20, 'card-head-icon')),
+    h('div', { class: 'set-block' }, h('div', { class: 'set-label' }, 'Quick start'), presets),
+    sizeRow,
+    row('Contrast', 'High makes text and edges brighter. Soft is easier on sensitive eyes.',
+      seg([['soft', 'Soft'], ['normal', 'Normal'], ['high', 'High']], val('contrast'), (v) => setAppearance({ contrast: v }))),
+    h('div', { class: 'set-block' },
+      h('div', { class: 'set-label' }, 'Font'),
+      h('div', { class: 'set-hint' }, 'Clear is plain and simple. Wide has bigger, more open letters. Friendly is rounded and loose, which many people with dyslexia find easier.'),
+      fontPick),
+    row('Colour vision', 'Done, warning and error colours that stay easy to tell apart. Every state also has its own word and icon.',
+      seg([['standard', 'Standard'], ['redgreen', 'Red–green safe'], ['blueyellow', 'Blue–yellow safe']], val('vision'), (v) => setAppearance({ vision: v }))),
+    row('Warm screen', 'Adds a warm tint, like Night light, to cut blue light.',
+      seg([['off', 'Off'], ['low', 'Low'], ['high', 'High']], val('warm'), (v) => setAppearance({ warm: v }))),
+    h('div', { class: 'options' },
+      toggle({ iconName: 'layers', label: 'More space between letters and lines', checked: val('textSpacing'), onChange: (v) => setAppearance({ textSpacing: v }) }),
+      toggle({ iconName: 'pencil', label: 'Thicker text', checked: val('boldText'), onChange: (v) => setAppearance({ boldText: v }) }),
+      toggle({ iconName: 'grid', label: 'Solid panels', hint: 'No see-through or blurred backgrounds.', checked: val('solid'), onChange: (v) => setAppearance({ solid: v }) }),
+      toggle({ iconName: 'sparkles', label: 'Bold outline on the selected button', hint: 'Easier to follow when using Tab and the keyboard.', checked: val('strongFocus'), onChange: (v) => setAppearance({ strongFocus: v }) }),
+      toggle({ iconName: 'link', label: 'Underline links', checked: val('underlineLinks'), onChange: (v) => setAppearance({ underlineLinks: v }) })),
+    h('div', { class: 'card-foot' }, btn('Reset eye options', { kind: 'ghost sm', icon: 'retry', onClick: () => setAppearance({ ...EYE_DEFAULTS }) })));
+}
+
+// Ctrl + / Ctrl − / Ctrl 0 change the size (main window only).
+{
+  document.addEventListener('keydown', (e) => {
+    // Only in the main window (the Capture window has no settings of its own).
+    if (typeof renderSettings !== 'function' || typeof S === 'undefined' || !S.settings) return;
+    if (!e.ctrlKey || e.altKey || e.metaKey) return;
+    const z = Number(S.settings && S.settings.appearance && S.settings.appearance.zoom) || 1;
+    let next = null;
+    if (e.key === '=' || e.key === '+') next = z + 0.05;
+    else if (e.key === '-' || e.key === '_') next = z - 0.05;
+    else if (e.key === '0') next = 1;
+    if (next === null) return;
+    e.preventDefault();
+    next = Math.round(Math.max(0.8, Math.min(1.75, next)) * 100) / 100;
+    if (next !== z) setAppearance({ zoom: next });
+  });
+}
+
+// The size choice in first-run setup, so nobody has to squint through it.
+function setupEyes(redraw) {
+  const z = Number(S.settings.appearance.zoom) || 1;
+  return h('div', { class: 'setup-eyes' },
+    h('div', { class: 'setup-eyes-row' }, h('span', { class: 'set-label' }, 'Text size'),
+      seg([[1, '100%'], [1.15, '115%'], [1.3, '130%'], [1.5, '150%']], [1, 1.15, 1.3, 1.5].includes(z) ? z : '', (v) => { setAppearance({ zoom: v }, { rerender: false }); redraw(); })),
+    h('p', { class: 'fine' }, ic('eye', 13), ' More for your eyes — contrast, easy-read fonts, colour-blind friendly colours — in Settings › Eyes & reading.'));
 }

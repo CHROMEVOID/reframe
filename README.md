@@ -60,7 +60,7 @@ Drop a `.txt` file full of links into `Documents\Reframe Other Sites` and they s
 Pull videos in from OneDrive, Google Drive and Dropbox folders, or sign in to **Plex**, **Jellyfin** or **Emby** and grab stuff from your own server.
 
 ### 🎨 Make it yours
-Themes, accent colours, corner roundness, how much stuff moves, zoom. A quick setup walks you through the basics the first time you open it, and <kbd>Ctrl</kbd> + <kbd>K</kbd> pulls up a command palette so you can jump anywhere.
+Themes (including a warm Paper one), accent colours, corner roundness, how much stuff moves. There's also an **Eyes & reading** section so it suits everyone's eyes: size from 80% to 175%, high or soft contrast, easy-read fonts, extra text spacing, thicker text, colour-blind friendly status colours, a warm screen, and bold keyboard outlines. A quick setup walks you through the basics the first time you open it, and <kbd>Ctrl</kbd> + <kbd>K</kbd> pulls up a command palette so you can jump anywhere.
 
 ### 🙈 Hidden mode
 Someone walks up behind you? Just type **`parent`**, **`show`**, **`parentmode`** or **`showoffmode`** anywhere in the app (not in a text box) and every video vanishes: the library, downloads, conversions, the lot. Nothing gets deleted and anything converting keeps going in the background. Type **`theregone`** and it all comes straight back. It even stays hidden after a restart until you do.

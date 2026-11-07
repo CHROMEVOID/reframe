@@ -47,7 +47,14 @@ const HELP = [
     'You get a Windows notification when something finishes. Closing Reframe while it’s busy asks first.',
   ]],
   ['brush', 'Make it yours', [
-    'Settings › Appearance: four themes (including light), accent colours or your own, animation level, corners, spacing and interface size.',
+    'Settings › Appearance: six themes (including Light and the warm Paper), accent colours or your own, animation level, corners and spacing.',
+  ]],
+  ['eye', 'Eyes & reading', [
+    'Settings › Eyes & reading makes Reframe easier on your eyes. Quick start sets everything in one click: Easy reading, Big & bold, High contrast or Gentle.',
+    'Text & interface size goes from 80% to 175%. Ctrl and + or − changes it from anywhere, Ctrl+0 goes back to 100%.',
+    'Contrast (Soft, Normal, High), easy-read fonts (Clear, Wide, Friendly), more space between letters and lines, and thicker text.',
+    'Colour vision: done, warning and error colours that red–green or blue–yellow colour-blind eyes can tell apart.',
+    'A warm screen to cut blue light, solid panels with no see-through backgrounds, a bold outline for keyboard users, and underlined links.',
   ]],
 ];
 
