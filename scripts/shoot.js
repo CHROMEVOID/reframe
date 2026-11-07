@@ -15,8 +15,8 @@ app.on('browser-window-created', (_e, win) => {
   // Only drive the main window; hidden helper windows are left alone.
   if (started) return;
   started = true;
-  win.webContents.on('console-message', (_ev, level, message) => {
-    if (level >= 2) console.log(`[renderer] ${message}`);
+  win.webContents.on('console-message', (ev) => {
+    if (ev.level === 'warning' || ev.level === 'error') console.log(`[renderer] ${ev.message}`);
   });
   win.webContents.once('did-finish-load', async () => {
     const wait = (ms) => new Promise((r) => setTimeout(r, ms));

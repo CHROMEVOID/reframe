@@ -47,7 +47,10 @@ const HELP = [
     'You get a Windows notification when something finishes. Closing Reframe while it’s busy asks first.',
   ]],
   ['brush', 'Make it yours', [
-    'Settings › Appearance: six themes (including Light and the warm Paper), accent colours or your own, animation level, corners and spacing.',
+    'Settings › Appearance: twelve themes, eight dark (Slate, Graphite, Midnight, Deep blue, Frost, Forest, Plum, Mocha) and four light (Light, Paper, Cloud, Blush).',
+    '21 accent colours, your own colour, or your own two-colour gradient. Shuffle picks one for you.',
+    'Colour strength (Muted, Normal, Vivid) and Tinted backgrounds, which mix a hint of your colour into the panels. Accent colours are always kept readable on every theme.',
+    'Also: animation level, corners and spacing.',
   ]],
   ['eye', 'Eyes & reading', [
     'Settings › Eyes & reading makes Reframe easier on your eyes. Quick start sets everything in one click: Easy reading, Big & bold, High contrast or Gentle.',

@@ -11,6 +11,72 @@
   --shade: 90, 66, 30;
 }
 
+/* ---------- more themes ---------- */
+[data-theme="slate"] {
+  --fg-rgb: 255, 255, 255;
+  --bg: #0c1015; --bg-2: #10151c; --panel: #151b24; --panel-2: #1a212c; --panel-3: #222a37;
+  --pop: #19202a; --modal: #161c25; --toast: #222a37;
+  --text: #e8edf4; --text-2: #9fa9b8; --text-3: #667183;
+  --shade: 0, 0, 0; color-scheme: dark;
+}
+/* Frost: cool blue-grey, soft on the eyes. */
+[data-theme="frost"] {
+  --fg-rgb: 236, 242, 255;
+  --bg: #11151d; --bg-2: #151a24; --panel: #1b2130; --panel-2: #212839; --panel-3: #293144;
+  --pop: #1f2636; --modal: #1c2232; --toast: #293144;
+  --text: #e6ecf7; --text-2: #a9b4c8; --text-3: #6f7a90;
+  --shade: 0, 4, 12; color-scheme: dark;
+}
+/* Forest: deep green. */
+[data-theme="forest"] {
+  --fg-rgb: 232, 255, 242;
+  --bg: #08110d; --bg-2: #0c1712; --panel: #112019; --panel-2: #16281f; --panel-3: #1d3328;
+  --pop: #14251d; --modal: #12211a; --toast: #1d3328;
+  --text: #e4f2ea; --text-2: #9fb8aa; --text-3: #647a6d;
+  --shade: 0, 6, 2; color-scheme: dark;
+}
+/* Plum: deep purple. */
+[data-theme="plum"] {
+  --fg-rgb: 248, 236, 255;
+  --bg: #110a16; --bg-2: #160e1c; --panel: #1d1326; --panel-2: #24182f; --panel-3: #2e1f3b;
+  --pop: #22172c; --modal: #1f1428; --toast: #2e1f3b;
+  --text: #f1e8f8; --text-2: #b3a3c4; --text-3: #776a86;
+  --shade: 6, 0, 10; color-scheme: dark;
+}
+/* Mocha: warm dark brown. */
+[data-theme="mocha"] {
+  --fg-rgb: 255, 244, 232;
+  --bg: #14100d; --bg-2: #191410; --panel: #211a15; --panel-2: #29211b; --panel-3: #332a22;
+  --pop: #271f19; --modal: #231c16; --toast: #332a22;
+  --text: #f3ebe2; --text-2: #b8a998; --text-3: #7d7062;
+  --shade: 8, 4, 0; color-scheme: dark;
+}
+/* Cloud: a light, slightly blue theme. */
+[data-theme="cloud"] {
+  --fg-rgb: 22, 34, 56;
+  --bg: #dfe8f3; --bg-2: #ecf2f9; --panel: #f7fbff; --panel-2: #edf3fa; --panel-3: #e0e9f4;
+  --pop: #f7fbff; --modal: #f7fbff; --toast: #f7fbff;
+  --text: #121b2b; --text-2: #45536a; --text-3: #8290a6;
+  --shade: 40, 60, 100; color-scheme: light;
+}
+/* Blush: a light, slightly pink theme. */
+[data-theme="blush"] {
+  --fg-rgb: 50, 24, 36;
+  --bg: #f0e1e6; --bg-2: #f8eef1; --panel: #fff8fa; --panel-2: #f8edf1; --panel-3: #efdfe5;
+  --pop: #fff8fa; --modal: #fff8fa; --toast: #fff8fa;
+  --text: #2a1720; --text-2: #5e4952; --text-3: #9a8590;
+  --shade: 100, 50, 70; color-scheme: light;
+}
+[data-theme="paper"], [data-theme="light"] { color-scheme: light; }
+
+/* ---------- colour options in Settings ---------- */
+.colour-extras { display: flex; flex-direction: column; gap: 4px; }
+.accent-now { color: var(--accent); font-weight: 600; margin-left: 6px; }
+.grad-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.grad-pick { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--line-2); border-radius: var(--radius-sm); background: var(--panel-2); color: var(--text-2); font-size: 12.5px; cursor: pointer; }
+.grad-pick input[type="color"] { width: 26px; height: 26px; border: 0; padding: 0; background: none; cursor: pointer; border-radius: 6px; }
+.grad-preview { flex: 1; min-width: 120px; height: 26px; border-radius: 999px; background: var(--grad); box-shadow: 0 0 0 1px var(--line-2) inset; }
+
 /* ---------- contrast ---------- */
 [data-contrast="high"] {
   --text: #ffffff; --text-2: #e6e9f0; --text-3: #bfc5d2;

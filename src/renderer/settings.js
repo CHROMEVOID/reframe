@@ -34,7 +34,7 @@ function renderSettings() {
   ap.theme === id ? ic('check', 14, 'theme-check') : null)));
 
   const customInput = h('input', { type: 'color', class: 'color-input', value: ap.custom || '#ff5e62', title: 'Pick your own colour' });
-  customInput.addEventListener('input', () => setAppearance({ accent: 'custom', custom: customInput.value }, { rerender: false }));
+  customInput.addEventListener('input', () => setAppearance({ accent: 'custom', custom: customInput.value, custom2: '' }, { rerender: false }));
   customInput.addEventListener('change', () => renderSettings());
   const swatches = h('div', { class: 'swatches' },
     Object.entries(ACCENTS).map(([id, a]) => h('button', {
@@ -49,6 +49,7 @@ function renderSettings() {
     h('div', { class: 'card-head' }, h('div', null, h('h2', null, 'Appearance'), h('p', { class: 'card-sub' }, 'Make Reframe look the way you like.')), ic('brush', 20, 'card-head-icon')),
     h('div', { class: 'set-block' }, h('div', { class: 'set-label' }, 'Theme'), themeCards),
     h('div', { class: 'set-block' }, h('div', { class: 'set-label' }, 'Accent colour'), swatches),
+    colourExtras(),
     h('div', { class: 'set-row' },
       h('div', { class: 'set-text' }, h('div', { class: 'set-label' }, 'Animations'), h('div', { class: 'set-hint' }, 'How much things move, glow and grow when you hover.')),
       seg([['full', 'Full'], ['subtle', 'Subtle'], ['off', 'Off']], ap.motion, (v) => setAppearance({ motion: v }))),
@@ -64,7 +65,7 @@ function renderSettings() {
     h('div', { class: 'card-foot' }, btn('Reset to default look', {
       kind: 'ghost sm',
       icon: 'retry',
-      onClick: () => setAppearance({ accent: 'ember', theme: 'graphite', motion: 'full', radius: 'round', density: 'comfortable', zoom: 1, aurora: true, splash: true, cardSize: 230 }),
+      onClick: () => setAppearance({ accent: 'ember', theme: 'graphite', strength: 'normal', tint: false, motion: 'full', radius: 'round', density: 'comfortable', zoom: 1, aurora: true, splash: true, cardSize: 230 }),
     })));
 
   // ---------- HandBrake ----------

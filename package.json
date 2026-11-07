@@ -1,7 +1,7 @@
 {
   "name": "reframe",
   "productName": "Reframe",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Convert whole folders of video with HandBrake, download videos, and keep a sorted media library.",
   "main": "src/main.js",
   "author": "chr0m3void",
@@ -15,7 +15,7 @@
   },
   "devDependencies": {
     "@electron/packager": "^18.4.4",
-    "electron": "^38.8.6"
+    "electron": "^45.2.3"
   },
   "dependencies": {
     "@ghostery/adblocker-electron": "^2.20.3",

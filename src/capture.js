@@ -603,7 +603,7 @@ class Capture {
         { label: 'Save', click: () => this.savePicture(wc, m.url, ref).then(say).catch(() => {}) },
         { label: 'Save as…', click: () => this.saveAs(m.url, fileNameOf(m.url, 'picture.jpg')) },
         { label: 'Copy picture', click: () => wc.copyImageAt(p.x, p.y) },
-        { label: 'Copy address', click: () => clipboard.writeText(m.url) },
+        { label: 'Copy address', click: () => Promise.resolve(clipboard.writeText(m.url)).catch(() => {}) },
         { label: 'Open it on its own', click: () => this.navigateAsk(m.url) },
       ];
       if (i === 0) items.push({ label: `Save ${what.toLowerCase()}${size(m)}`, click: actions[0].click }, { label: 'Save picture as…', click: actions[1].click });
@@ -615,7 +615,7 @@ class Capture {
         items.push(
           { label: `Save ${noun}${size(v)}`, click: () => this.download({ url: v.url, kind: kindOf(v.url, '') || 'File' }).then(() => say(fileNameOf(v.url, noun))).catch(() => {}) },
           { label: `Save ${noun} as…`, click: () => this.saveAs(v.url, fileNameOf(v.url, `${noun}.mp4`)) },
-          { label: `Copy ${noun} address`, click: () => clipboard.writeText(v.url) },
+          { label: `Copy ${noun} address`, click: () => Promise.resolve(clipboard.writeText(v.url)).catch(() => {}) },
         );
       } else {
         // A streaming player: find the real stream and save the best one.
@@ -636,7 +636,7 @@ class Capture {
     if (p.linkURL && /^https?:/i.test(p.linkURL)) {
       items.push(
         { label: 'Open link', click: () => this.navigateAsk(p.linkURL) },
-        { label: 'Copy link address', click: () => clipboard.writeText(p.linkURL) },
+        { label: 'Copy link address', click: () => Promise.resolve(clipboard.writeText(p.linkURL)).catch(() => {}) },
         { label: 'Download link with Reframe', click: () => this.download({ url: p.linkURL, page: true, title: p.linkText || '' }).catch(() => {}) },
         { label: 'Save pictures from link (comic)', click: () => this.picturesFromLinks([p.linkURL], true).catch(() => {}) },
         { type: 'separator' },
@@ -699,7 +699,25 @@ class Capture {
   // real picture in reading order — see picture-scan.js.
   async collectPictures(wc) {
     const { pageScan } = require('./picture-scan');
-    return wc.executeJavaScript(`(${pageScan.toString()})(${JSON.stringify({ scroll: true })})`, true);
+    const code = `(${pageScan.toString()})(${JSON.stringify({ scroll: true })})`;
+    // If the page reloads or swaps itself out while it's being read (a reload
+    // to bring in blocked pictures, or the site's own redirect), the read is
+    // lost: wait for the new page to finish loading and read it again.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await wc.executeJavaScript(code, true);
+      } catch (e) {
+        const gone = /disposed|destroyed|navigat|frame was removed/i.test(String(e && e.message));
+        if (!gone || attempt >= 2 || wc.isDestroyed()) throw e;
+        await new Promise((res) => {
+          const t = setTimeout(res, 20000);
+          const done = () => { clearTimeout(t); res(); };
+          if (!wc.isLoading()) done();
+          else wc.once('did-stop-loading', done);
+        });
+        await new Promise((res) => setTimeout(res, 2000));
+      }
+    }
   }
 
   async findPictures() {
@@ -712,11 +730,13 @@ class Capture {
         true,
       ).catch(() => 0);
       if (broken) {
-        wc.reload();
-        await new Promise((res) => {
+        // Wait for the reload's own finish (not a stop event from the old page).
+        const finished = new Promise((res) => {
           const t = setTimeout(res, 30000);
-          wc.once('did-stop-loading', () => { clearTimeout(t); res(); });
+          wc.once('did-finish-load', () => { clearTimeout(t); res(); });
         });
+        wc.reload();
+        await finished;
         await new Promise((res) => setTimeout(res, 2500));
       }
       return this.collectPictures(wc);

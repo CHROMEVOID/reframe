@@ -389,22 +389,11 @@ function applyLook(a) {
   if (!a) return;
   const root = document.documentElement.style;
   const theme = THEMES[a.theme] ? a.theme : 'graphite';
-  let g;
-  let accent;
-  if (a.accent === 'custom' && /^#[0-9a-f]{6}$/i.test(a.custom || '')) {
-    accent = a.custom;
-    g = [shade(accent, 0.35), accent, shade(accent, -0.35)];
-  } else {
-    const p = ACCENTS[a.accent] || ACCENTS.ember;
-    g = p.g;
-    accent = p.a;
-  }
+  const { g, accent } = lookColours(a, theme);
   const light = !!THEMES[theme].light;
-  if (light && luminance(accent) > 0.6) {
-    accent = shade(accent, -0.55);
-    g = g.map((c) => shade(c, -0.5));
-  }
-  const t = THEMES[theme];
+  const base = THEMES[theme];
+  const tint = (c) => (a.tint ? mixHex(c, accent, light ? 0.06 : 0.08) : c);
+  const t = { ...base, bg: tint(base.bg), panel: tint(base.panel) };
   root.setProperty('--g1', g[0]);
   root.setProperty('--g2', g[1]);
   root.setProperty('--g3', g[2]);
